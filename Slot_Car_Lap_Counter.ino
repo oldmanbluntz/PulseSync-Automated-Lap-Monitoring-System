@@ -5,8 +5,8 @@
 #include <WiFi.h>
 
 // Define Wi-Fi credentials
-const char* ssid = "Wokwi-GUEST";
-const char* password = "";
+const char* ssid = "The Promised LAN";
+const char* password = "goldenbitch";
 
 // Create instances of SSD1306 displays and AsyncWebServer
 Adafruit_SSD1306 display1(128, 64, &Wire, -1);
@@ -39,9 +39,12 @@ bool lapCountInitialized2 = false;
 int lapPressCount1 = 0;
 int lapPressCount2 = 0;
 
+// Define the delay duration (500 milliseconds = 0.5 seconds)
+const unsigned long lapCountDelay = 500;
+
 // Setup function
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   // Connect to Wi-Fi
   WiFi.begin(ssid, password);
@@ -71,20 +74,40 @@ void setup() {
 
   // Set up the web server route and response
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    String html = "<html><body>";
-    html += "<h1>Lane 1</h1>";
-    html += "<p>Laps: " + String(lapCount1) + "</p>";
-    html += "<p>Current Lap: " + String(millis() - startTime1) + " ms</p>";
-    html += "<p>Recent Lap: " + String(recentLap1 / 1000.0, 3) + " s</p>";
-    html += "<p>Best Lap: " + String(bestLap1 / 1000.0, 3) + " s</p>";
-    html += "<h1>Lane 2</h1>";
-    html += "<p>Laps: " + String(lapCount2) + "</p>";
-    html += "<p>Current Lap: " + String(millis() - startTime2) + " ms</p>";
-    html += "<p>Recent Lap: " + String(recentLap2 / 1000.0, 3) + " s</p>";
-    html += "<p>Best Lap: " + String(bestLap2 / 1000.0, 3) + " s</p>";
-    html += "</body></html>";
-    request->send(200, "text/html", html);
-  });
+  String html = "<html><head>";
+  html += "<script>";
+  html += "function updateTimer() {";
+html += "var referenceTime = " + String(millis()) + ";"; // Get the current ESP32 timestamp
+if (lapCounting1) {
+  html += "var currentTime1 = new Date().getTime();";
+  html += "document.getElementById('currentLap1').innerHTML = 'Current Lap: ' + (((currentTime1 - referenceTime) / 1000.0) % 1000000).toFixed(3) + ' s';";
+} else {
+  html += "document.getElementById('currentLap1').innerHTML = 'Current Lap: 0.000 s';";
+}
+if (lapCounting2) {
+  html += "var currentTime2 = new Date().getTime();";
+  html += "document.getElementById('currentLap2').innerHTML = 'Current Lap: ' + (((currentTime2 - referenceTime) / 1000.0) % 1000000).toFixed(3) + ' s';";
+} else {
+  html += "document.getElementById('currentLap2').innerHTML = 'Current Lap: 0.000 s';";
+}
+html += "}";
+
+  html += "setInterval(updateTimer, 100);"; // Update every 100 milliseconds
+  html += "</script>";
+  html += "</head><body>";
+  html += "<h1>Lane 1</h1>";
+  html += "<p>Laps: " + String(lapCount1) + "</p>";
+  html += "<p id='currentLap1'></p>";
+  html += "<p>Recent Lap: " + String(recentLap1 / 1000.0, 3) + " s</p>";
+  html += "<p>Best Lap: " + String(bestLap1 / 1000.0, 3) + " s</p>";
+  html += "<h1>Lane 2</h1>";
+  html += "<p>Laps: " + String(lapCount2) + "</p>";
+  html += "<p id='currentLap2'></p>";
+  html += "<p>Recent Lap: " + String(recentLap2 / 1000.0, 3) + " s</p>";
+  html += "<p>Best Lap: " + String(bestLap2 / 1000.0, 3) + " s</p>";
+  html += "</body></html>";
+  request->send(200, "text/html", html);
+});
 
   // Start the web server
   server.begin();
@@ -100,12 +123,16 @@ void loop() {
         lapCounting1 = true;
         startTime1 = millis();
       } else {
-        updateLapInfo(1);
+        // Check if enough time has passed since the last button press
+        if ((millis() - lastDebounceTime1) > lapCountDelay) {
+          updateLapInfo(1);
+          lastDebounceTime1 = millis();
+        }
       }
       lastDebounceTime1 = millis();
     }
   }
-  
+
   // Button 2 handling
   if ((millis() - lastDebounceTime2) > debounceDelay) {
     if (digitalRead(buttonPin2) == LOW) {
@@ -114,12 +141,16 @@ void loop() {
         lapCounting2 = true;
         startTime2 = millis();
       } else {
-        updateLapInfo(2);
+        // Check if enough time has passed since the last button press
+        if ((millis() - lastDebounceTime2) > lapCountDelay) {
+          updateLapInfo(2);
+          lastDebounceTime2 = millis();
+        }
       }
       lastDebounceTime2 = millis();
     }
   }
-  
+
   // Reset button handling
   if (digitalRead(resetPin) == LOW) {
     resetLapInfo();
@@ -165,13 +196,13 @@ void updateLapInfo(int lane) {
   if (*lapCounting) {
     *lapTime = currentTime - *startTime;
     Serial.println("Lap time: " + String(*lapTime / 1000.0, 3));
-    
+
     // Update best lap if the current lap is faster
     if (*lapTime < *bestLap || *bestLap == 0) {
       *bestLap = *lapTime;
       Serial.println("Best lap: " + String(*bestLap / 1000.0, 3));
     }
-    
+
     // Update recent lap and reset the lap timer
     *recentLap = *lapTime;
     *startTime = currentTime;
