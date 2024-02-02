@@ -1,7 +1,8 @@
 # Slot-Car-Lap-Counter
 Just a timer system for slot car tracks. Based around the ESP32, has a web portal that displays the data, as well as on screens on the track.
 
-The Web Portal is currently not tested.
+The Web Portal is a work in progress. It does work, but I am working out the current time displaying properly, and also starting to update when the button is first pressed on the system,
+like it displays on the screen.
 
 I have other plans to add to this. MicroSD card support to save track and driver data, choices for multiple types of LCD or OLED screen for the physical track,
 choices to choose how many lanes, and a few other options.
