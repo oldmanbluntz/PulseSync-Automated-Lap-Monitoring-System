@@ -17,4 +17,5 @@ The surrent hardware consists of:
 
 One of the OLED screens has had it's address changed by moving the resistor on the back. The ones I currently have use addresses 0x78 and 0x7A, yours may differ,
 so update the addresses in the code on lines 64 and 65. They are wired to the default SDA and SCL pins, SDA is pin 21 and SCL is pin 22. The activation switch for lane 1 is
-is wired to pin 14, the activation switch for Lane 2 is wired to pin 27, and the reset button is wired to pin 26.
+is wired to pin 14, the activation switch for Lane 2 is wired to pin 27, and the reset button is wired to pin 26. Make sure to update your home WiFi SSID and Password in the
+code as well.
