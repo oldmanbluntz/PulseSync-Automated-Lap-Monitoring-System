@@ -73,36 +73,31 @@ void setup() {
   displayLapInfo(2, lapCount2, 0, "--", "--");
 
   // Set up the web server route and response
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-  String html = "<html><head>";
-  html += "<script>";
-  html += "function updateTimer() {";
-html += "var referenceTime = " + String(millis()) + ";"; // Get the current ESP32 timestamp
-if (lapCounting1) {
-  html += "var currentTime1 = new Date().getTime();";
-  html += "document.getElementById('currentLap1').innerHTML = 'Current Lap: ' + (((currentTime1 - referenceTime) / 1000.0) % 1000000).toFixed(3) + ' s';";
-} else {
-  html += "document.getElementById('currentLap1').innerHTML = 'Current Lap: 0.000 s';";
-}
-if (lapCounting2) {
-  html += "var currentTime2 = new Date().getTime();";
-  html += "document.getElementById('currentLap2').innerHTML = 'Current Lap: ' + (((currentTime2 - referenceTime) / 1000.0) % 1000000).toFixed(3) + ' s';";
-} else {
-  html += "document.getElementById('currentLap2').innerHTML = 'Current Lap: 0.000 s';";
-}
-html += "}";
-
-  html += "setInterval(updateTimer, 100);"; // Update every 100 milliseconds
-  html += "</script>";
-  html += "</head><body>";
+server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+  String html = "<html><body>";
   html += "<h1>Lane 1</h1>";
   html += "<p>Laps: " + String(lapCount1) + "</p>";
-  html += "<p id='currentLap1'></p>";
+
+  // Check if lap counting has started before displaying the current lap time
+  if (lapCounting1) {
+    html += "<p>Current Lap: " + String((millis() - startTime1) / 1000.0, 3) + " s</p>";
+  } else {
+    html += "<p>Current Lap: --</p>";
+  }
+
   html += "<p>Recent Lap: " + String(recentLap1 / 1000.0, 3) + " s</p>";
   html += "<p>Best Lap: " + String(bestLap1 / 1000.0, 3) + " s</p>";
+
   html += "<h1>Lane 2</h1>";
   html += "<p>Laps: " + String(lapCount2) + "</p>";
-  html += "<p id='currentLap2'></p>";
+
+  // Check if lap counting has started before displaying the current lap time
+  if (lapCounting2) {
+    html += "<p>Current Lap: " + String((millis() - startTime2) / 1000.0, 3) + " s</p>";
+  } else {
+    html += "<p>Current Lap: --</p>";
+  }
+
   html += "<p>Recent Lap: " + String(recentLap2 / 1000.0, 3) + " s</p>";
   html += "<p>Best Lap: " + String(bestLap2 / 1000.0, 3) + " s</p>";
   html += "</body></html>";
