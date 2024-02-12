@@ -6,8 +6,8 @@
 #include <ArduinoJson.h>
 
 // Define Wi-Fi credentials
-const char* ssid = "The Promised LAN";
-const char* password = "goldenbitch";
+const char* ssid = "WiFi SSID";
+const char* password = "WiFi Password";
 
 // Create instances of SSD1306 displays and AsyncWebServer
 Adafruit_SSD1306 display1(128, 64, &Wire, -1);
