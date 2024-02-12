@@ -3,6 +3,7 @@
 #include <Adafruit_SSD1306.h>
 #include <ESPAsyncWebSrv.h>
 #include <WiFi.h>
+#include <ArduinoJson.h>
 
 // Define Wi-Fi credentials
 const char* ssid = "The Promised LAN";
@@ -73,35 +74,63 @@ void setup() {
   displayLapInfo(2, lapCount2, 0, "--", "--");
 
   // Set up the web server route and response
+server.on("/lap-info", HTTP_GET, [](AsyncWebServerRequest *request){
+  StaticJsonDocument<400> doc;
+  doc["lane1"]["lapCount"] = lapCount1;
+  doc["lane1"]["recentLap"] = recentLap1 / 1000.0;
+  doc["lane1"]["bestLap"] = bestLap1 / 1000.0;
+  doc["lane1"]["currentLap"] = lapCounting1 ? (millis() - startTime1) / 1000.0 : static_cast<double>(0);
+  doc["lane2"]["lapCount"] = lapCount2;
+  doc["lane2"]["recentLap"] = recentLap2 / 1000.0;
+  doc["lane2"]["bestLap"] = bestLap2 / 1000.0;
+  doc["lane2"]["currentLap"] = lapCounting2 ? (millis() - startTime2) / 1000.0 : static_cast<double>(0);
+  String json;
+  serializeJson(doc, json);
+  request->send(200, "application/json", json);
+});
+
+  // Set up the web server route and response
 server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-  String html = "<html><body>";
-  html += "<h1>Lane 1</h1>";
-  html += "<p>Laps: " + String(lapCount1) + "</p>";
-
-  // Check if lap counting has started before displaying the current lap time
-  if (lapCounting1) {
-    html += "<p>Current Lap: " + String((millis() - startTime1) / 1000.0, 3) + " s</p>";
-  } else {
-    html += "<p>Current Lap: --</p>";
-  }
-
-  html += "<p>Recent Lap: " + String(recentLap1 / 1000.0, 3) + " s</p>";
-  html += "<p>Best Lap: " + String(bestLap1 / 1000.0, 3) + " s</p>";
-
-  html += "<h1>Lane 2</h1>";
-  html += "<p>Laps: " + String(lapCount2) + "</p>";
-
-  // Check if lap counting has started before displaying the current lap time
-  if (lapCounting2) {
-    html += "<p>Current Lap: " + String((millis() - startTime2) / 1000.0, 3) + " s</p>";
-  } else {
-    html += "<p>Current Lap: --</p>";
-  }
-
-  html += "<p>Recent Lap: " + String(recentLap2 / 1000.0, 3) + " s</p>";
-  html += "<p>Best Lap: " + String(bestLap2 / 1000.0, 3) + " s</p>";
-  html += "</body></html>";
-  request->send(200, "text/html", html);
+    String html = "<html><head>";
+    html += "<style>";
+    html += ".lane-container { display: flex; justify-content: space-around; }";
+    html += ".lane { flex: 1; text-align: center; }";
+    html += "</style>";
+    html += "</head><body>";
+    html += "<div class='lane-container'>";
+    html += "<div class='lane'>";
+    html += "<h1>Lane 1</h1>";
+    html += "<p>Laps: <span id='lapCount1'>--</span></p>";
+    html += "<p>Current Lap: <span id='currentLap1'>--</span> s</p>";
+    html += "<p>Recent Lap: <span id='recentLap1'>--</span> s</p>";
+    html += "<p>Best Lap: <span id='bestLap1'>--</span> s</p>";
+    html += "</div>";
+    html += "<div class='lane'>";
+    html += "<h1>Lane 2</h1>";
+    html += "<p>Laps: <span id='lapCount2'>--</span></p>";
+    html += "<p>Current Lap: <span id='currentLap2'>--</span> s</p>";
+    html += "<p>Recent Lap: <span id='recentLap2'>--</span> s</p>";
+    html += "<p>Best Lap: <span id='bestLap2'>--</span> s</p>";
+    html += "</div>";
+    html += "</div>";
+    html += "<script>";
+    html += "setInterval(function() {";
+    html += "fetch('/lap-info')";
+    html += ".then(response => response.json())";
+    html += ".then(data => {";
+    html += "document.getElementById('lapCount1').textContent = data.lane1.lapCount;";
+    html += "document.getElementById('currentLap1').textContent = data.lane1.currentLap;";
+    html += "document.getElementById('recentLap1').textContent = data.lane1.recentLap;";
+    html += "document.getElementById('bestLap1').textContent = data.lane1.bestLap;";
+    html += "document.getElementById('lapCount2').textContent = data.lane2.lapCount;";
+    html += "document.getElementById('currentLap2').textContent = data.lane2.currentLap;";
+    html += "document.getElementById('recentLap2').textContent = data.lane2.recentLap;";
+    html += "document.getElementById('bestLap2').textContent = data.lane2.bestLap;";
+    html += "});";
+    html += "}, 25);"; // Decreased interval for more frequent updates
+    html += "</script>";
+    html += "</body></html>";
+    request->send(200, "text/html", html);
 });
 
   // Start the web server
