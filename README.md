@@ -19,3 +19,4 @@ One of the OLED screens has had it's address changed by moving the resistor on t
 so update the addresses in the code on lines 64 and 65. They are wired to the default SDA and SCL pins, SDA is pin 21 and SCL is pin 22. The activation switch for lane 1 is
 is wired to pin 14, the activation switch for Lane 2 is wired to pin 27, and the reset button is wired to pin 26. Make sure to update your home WiFi SSID and Password in the
 code as well.
+![Screenshot 2024-02-12 110554](https://github.com/oldmanbluntz/Slot-Car-Lap-Counter/assets/2407099/90e60df0-9c61-4c25-8916-997d475fa514)
