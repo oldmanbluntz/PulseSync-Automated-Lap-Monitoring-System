@@ -6,7 +6,7 @@ The Web Portal is a work in progress. It works presently, but will change.
 I have other plans to add to this. MicroSD card support to save track and driver data, choices for multiple types of LCD or OLED screen for the physical track,
 choices to choose how many lanes, and a few other options.
 
-If you would like to see the wiring layout, and see how it operates with just simple buttons, check out the build on Wokwi I have made
+If you would like to see the wiring layout, and see how it operates with just simple buttons, check out the build on Wokwi I have made. The project on Wokwi does not incorporate the web server stuff.
 https://wokwi.com/projects/388409586717645825
 
 The surrent hardware consists of:
