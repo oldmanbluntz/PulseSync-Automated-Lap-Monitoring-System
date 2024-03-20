@@ -4,10 +4,11 @@
 #include <ESPAsyncWebSrv.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
+#include <FastLED.h>
 
 // Define Wi-Fi credentials
-const char* ssid = "WiFi SSID";
-const char* password = "WiFi Password";
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
 
 // Create instances of SSD1306 displays and AsyncWebServer
 Adafruit_SSD1306 display1(128, 64, &Wire, -1);
@@ -24,6 +25,17 @@ int lapCount1, lapCount2;
 const int buttonPin1 = 14;
 const int buttonPin2 = 27;
 const int resetPin = 26;
+const int startButtonPin = 25;
+const int buzzerPin = 16;
+
+// Pins for start lights
+#define LED_PIN     13  // Pin connected to the LED strip
+#define NUM_LEDS    8   // Number of LEDs in the strip
+#define LED_TYPE    WS2812B
+#define COLOR_ORDER GRB
+
+// Create instace of CRGB array
+CRGB leds[NUM_LEDS];
 
 // Debouncing variables
 unsigned long lastDebounceTime1 = 0;
@@ -43,6 +55,13 @@ int lapPressCount2 = 0;
 // Define the delay duration (500 milliseconds = 0.5 seconds)
 const unsigned long lapCountDelay = 500;
 
+// Function to play tone
+void playTone(int frequency, int duration) {
+  tone(buzzerPin, frequency);
+  delay(duration);
+  noTone(buzzerPin);
+}
+
 // Setup function
 void setup() {
   Serial.begin(115200);
@@ -59,11 +78,16 @@ void setup() {
   pinMode(buttonPin1, INPUT_PULLUP);
   pinMode(buttonPin2, INPUT_PULLUP);
   pinMode(resetPin, INPUT_PULLUP);
+  pinMode(startButtonPin, INPUT_PULLUP);
+  pinMode(buzzerPin, OUTPUT);
+
+  // Initialize LED strip
+  FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
 
   // Initialize displays and clear them
   Wire.begin();
-  display1.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  display2.begin(SSD1306_SWITCHCAPVCC, 0x3D);
+  display1.begin(SSD1306_SWITCHCAPVCC, 0x3D);
+  display2.begin(SSD1306_SWITCHCAPVCC, 0x3C);
   display1.clearDisplay();
   display2.clearDisplay();
 
@@ -173,6 +197,39 @@ void loop() {
       }
       lastDebounceTime2 = millis();
     }
+  }
+
+  // Starting light sequence logic
+  if (digitalRead(startButtonPin) == LOW) {
+    // Lights sequence
+    for (int i = 0; i <= NUM_LEDS / 2; i++) {
+      // Light first i and last i LEDs red
+      for (int j = 0; j < i; j++) {
+        leds[j] = CRGB::Red;
+        leds[NUM_LEDS - 1 - j] = CRGB::Red;
+      }
+      FastLED.show();
+      if (i > 0 && i <= 4) { // Play 400Hz tone four times when setting the red lights
+        playTone(400, 50); // Play a short beep
+      }
+      delay(1000);
+    }
+
+    // Turn all LEDs red
+    fill_solid(leds, NUM_LEDS, CRGB::Red);
+    FastLED.show();
+    delay(1000);
+
+    // Turn all LEDs green
+    fill_solid(leds, NUM_LEDS, CRGB::Green);
+    FastLED.show();
+    playTone(1000, 500); // Play a short beep
+    delay(random(1000, 2000));  // Random delay between 1 to 2 seconds
+
+    // Turn all LEDs off
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+    FastLED.show();
+    delay(3000);  // Green lights stay on for 3 seconds
   }
 
   // Reset button handling
