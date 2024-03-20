@@ -66,6 +66,10 @@ void playTone(int frequency, int duration) {
 void setup() {
   Serial.begin(115200);
 
+  // Initialize LEDC for FastLED
+  ledcSetup(0, 5000, 8);  // LEDC channel 0, 5 kHz PWM, 8-bit resolution
+    ledcAttachPin(LED_PIN, 13);  // Attach LED_PIN to LEDC channel 0
+
   // Connect to Wi-Fi
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
