@@ -19,6 +19,8 @@ AsyncWebServer server(80);
 unsigned long startTime1, startTime2;
 unsigned long lapTime1, lapTime2;
 unsigned long bestLap1, bestLap2, recentLap1, recentLap2;
+unsigned long redLightStartTime = 0;
+unsigned long greenLightStartTime = 0;
 int lapCount1, lapCount2;
 
 // Pins for buttons and reset
@@ -165,7 +167,15 @@ server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
   server.begin();
 }
 
-// Loop function
+enum LightSequenceState {
+  IDLE,
+  RED_LIGHTS,
+  GREEN_LIGHTS,
+  TURN_OFF_LIGHTS
+};
+
+LightSequenceState lightState = IDLE;
+
 void loop() {
   // Button 1 handling
   if ((millis() - lastDebounceTime1) > debounceDelay) {
@@ -203,37 +213,61 @@ void loop() {
     }
   }
 
-  // Starting light sequence logic
-  if (digitalRead(startButtonPin) == LOW) {
-    // Lights sequence
-    for (int i = 0; i <= NUM_LEDS / 2; i++) {
-      // Light first i and last i LEDs red
-      for (int j = 0; j < i; j++) {
-        leds[j] = CRGB::Red;
-        leds[NUM_LEDS - 1 - j] = CRGB::Red;
+  switch (lightState) {
+    case IDLE:
+      if (digitalRead(startButtonPin) == LOW) {
+        lightState = RED_LIGHTS;
+        redLightStartTime = millis();
       }
-      FastLED.show();
-      if (i > 0 && i <= 4) { // Play 400Hz tone four times when setting the red lights
+      break;
+    case RED_LIGHTS:
+  // Turn on outer LEDs one by one with a tone
+  if (millis() - redLightStartTime >= 1000) {
+    for (int i = 0; i <= NUM_LEDS / 2; i++) {
+      leds[i] = CRGB::Red;
+      leds[NUM_LEDS - 1 - i] = CRGB::Red;
+      if (i == 0 || i == 7) { // Play 400Hz tone for LEDs 1 and 8
+        playTone(400, 50); // Play a short beep
+      } else if (i == 1 || i == 6) { // Play 400Hz tone for LEDs 2 and 7
+        playTone(400, 50); // Play a short beep
+      } else if (i == 2 || i == 5) { // Play 400Hz tone for LEDs 3 and 6
+        playTone(400, 50); // Play a short beep
+      } else if (i == 3 || i == 4) { // Play 400Hz tone for LEDs 4 and 5
         playTone(400, 50); // Play a short beep
       }
+      FastLED.show();
       delay(1000);
     }
-
-    // Turn all LEDs red
-    fill_solid(leds, NUM_LEDS, CRGB::Red);
-    FastLED.show();
-    delay(1000);
-
-    // Turn all LEDs green
-    fill_solid(leds, NUM_LEDS, CRGB::Green);
-    FastLED.show();
-    playTone(1000, 500); // Play a short beep
-    delay(random(1000, 2000));  // Random delay between 1 to 2 seconds
-
-    // Turn all LEDs off
-    fill_solid(leds, NUM_LEDS, CRGB::Black);
-    FastLED.show();
-    delay(3000);  // Green lights stay on for 3 seconds
+    lightState = GREEN_LIGHTS;
+  }
+  break;
+    case GREEN_LIGHTS:
+      // Turn all LEDs green after a random delay
+      if (millis() - redLightStartTime >= 5000) {
+        fill_solid(leds, NUM_LEDS, CRGB::Green);
+        FastLED.show();
+        playTone(1000, 500); // Play a short beep
+        greenLightStartTime = millis();
+        lightState = TURN_OFF_LIGHTS;
+      }
+      break;
+    case TURN_OFF_LIGHTS:
+      // Check for button presses during green lights phase
+      if (digitalRead(buttonPin1) == LOW) {
+        // Handle Button 1 press
+        // You can add the necessary logic here
+      }
+      if (digitalRead(buttonPin2) == LOW) {
+        // Handle Button 2 press
+        // You can add the necessary logic here
+      }
+      // Turn off lights after 3 seconds
+      if (millis() - greenLightStartTime >= 3000) {
+        fill_solid(leds, NUM_LEDS, CRGB::Black);
+        FastLED.show();
+        lightState = IDLE;
+      }
+      break;
   }
 
   // Reset button handling
