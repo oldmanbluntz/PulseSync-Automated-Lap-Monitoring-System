@@ -1,7 +1,7 @@
 // Include necessary libraries
 #include <Wire.h>
 #include <Adafruit_SSD1306.h>
-#include <ESPAsyncWebSrv.h>
+#include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include <FastLED.h>
@@ -49,6 +49,8 @@ bool lapCounting1 = false;
 bool lapCounting2 = false;
 bool lapCountInitialized1 = false;
 bool lapCountInitialized2 = false;
+bool ledTonePlayed[NUM_LEDS] = {false}; // Array to keep track of whether tone has been played for each LED
+
 
 // Lap press counters (not currently used in the code)
 int lapPressCount1 = 0;
@@ -56,6 +58,8 @@ int lapPressCount2 = 0;
 
 // Define the delay duration (500 milliseconds = 0.5 seconds)
 const unsigned long lapCountDelay = 500;
+const unsigned long minDelayBeforeGreen = 1000; // 1 second
+const unsigned long maxDelayBeforeGreen = 2000; // 2 seconds
 
 // Function to play tone
 void playTone(int frequency, int duration) {
@@ -64,9 +68,18 @@ void playTone(int frequency, int duration) {
   noTone(buzzerPin);
 }
 
+void updateLapInfo(int lane);
+void resetLapInfo();
+void displayLapInfo(int lane, int lapCount, unsigned long currentLap, String bestLap, String recentLap);
+
 // Setup function
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
+  randomSeed(esp_random()); // Use ESP hardware number generator for a random seed
+  unsigned long seed = esp_random();
+  randomSeed(seed);
+  Serial.print("Random seed: ");
+  Serial.println(seed); // Print the random seed to the serial monitor
 
   // Initialize LEDC for FastLED
   ledcSetup(0, 5000, 8);  // LEDC channel 0, 5 kHz PWM, 8-bit resolution
@@ -176,6 +189,7 @@ enum LightSequenceState {
 
 LightSequenceState lightState = IDLE;
 
+
 void loop() {
   // Button 1 handling
   if ((millis() - lastDebounceTime1) > debounceDelay) {
@@ -214,61 +228,85 @@ void loop() {
   }
 
   switch (lightState) {
-    case IDLE:
-      if (digitalRead(startButtonPin) == LOW) {
-        lightState = RED_LIGHTS;
-        redLightStartTime = millis();
-      }
-      break;
-    case RED_LIGHTS:
-  // Turn on outer LEDs one by one with a tone
-  if (millis() - redLightStartTime >= 1000) {
-    for (int i = 0; i <= NUM_LEDS / 2; i++) {
-      leds[i] = CRGB::Red;
-      leds[NUM_LEDS - 1 - i] = CRGB::Red;
-      if (i == 0 || i == 7) { // Play 400Hz tone for LEDs 1 and 8
-        playTone(400, 50); // Play a short beep
-      } else if (i == 1 || i == 6) { // Play 400Hz tone for LEDs 2 and 7
-        playTone(400, 50); // Play a short beep
-      } else if (i == 2 || i == 5) { // Play 400Hz tone for LEDs 3 and 6
-        playTone(400, 50); // Play a short beep
-      } else if (i == 3 || i == 4) { // Play 400Hz tone for LEDs 4 and 5
-        playTone(400, 50); // Play a short beep
-      }
-      FastLED.show();
-      delay(1000);
+  case IDLE:
+    if (digitalRead(startButtonPin) == LOW) {
+      lightState = RED_LIGHTS;
+      redLightStartTime = millis();
     }
-    lightState = GREEN_LIGHTS;
+    break;
+case RED_LIGHTS:
+    // Turn on outer LEDs one by one with a tone
+    if (millis() - redLightStartTime >= 1000) {
+        static int ledIndex = 0; // Variable to track the LED index
+        static unsigned long previousLEDTime = 0; // Variable to track the previous LED turning on time
+        static bool delayBeforeGreenInitialized = false; // Flag to indicate if delay before green has been initialized
+        static unsigned long delayBeforeGreen; // Variable to store the delay before turning green
+
+        // Reset delayBeforeGreenInitialized flag at the start of the loop
+        delayBeforeGreenInitialized = false;
+
+        // Check if all LEDs have been turned on
+        if (ledIndex >= NUM_LEDS / 2) {
+            // Initialize delay before green if not already initialized
+            if (!delayBeforeGreenInitialized) {
+                // Generate a random delay before turning green
+                delayBeforeGreen = random(1000, 2001); // Generates a random number between 1000 and 2000 (inclusive)
+                Serial.print("Random delay before green: ");
+                Serial.println(delayBeforeGreen);
+                delayBeforeGreenInitialized = true;
+            }
+
+            // Check if it's time to turn green
+            if (millis() - redLightStartTime >= 1000 + delayBeforeGreen) {
+                lightState = GREEN_LIGHTS; // Move to the green light phase
+                return; // Exit the loop
+            }
+        }
+
+        // Calculate the time elapsed since the previous LED turning on time
+        unsigned long currentTime = millis();
+        unsigned long elapsedTime = currentTime - previousLEDTime;
+
+        // Check if it's time to turn on the next LED
+        if (elapsedTime >= 1000) {
+            // Play tone for the current LED
+            if (!ledTonePlayed[ledIndex]) {
+                playTone(400, 50); // Play a short beep
+                ledTonePlayed[ledIndex] = true; // Mark the tone as played for this LED
+            }
+
+            // Turn on the current LED
+            leds[ledIndex] = CRGB::Red;
+            leds[NUM_LEDS - 1 - ledIndex] = CRGB::Red;
+            FastLED.show();
+
+            // Update the previous LED turning on time
+            previousLEDTime = currentTime;
+
+            // Move to the next LED
+            ledIndex++;
+        }
+    }
+    break;
+case GREEN_LIGHTS:
+  // Turn all LEDs green after a random delay
+  if (millis() - redLightStartTime >= 5000) {
+    fill_solid(leds, NUM_LEDS, CRGB::Green);
+    FastLED.show();
+    playTone(1000, 250); // Play a short beep
+    greenLightStartTime = millis();
+    lightState = TURN_OFF_LIGHTS;
   }
   break;
-    case GREEN_LIGHTS:
-      // Turn all LEDs green after a random delay
-      if (millis() - redLightStartTime >= 5000) {
-        fill_solid(leds, NUM_LEDS, CRGB::Green);
-        FastLED.show();
-        playTone(1000, 500); // Play a short beep
-        greenLightStartTime = millis();
-        lightState = TURN_OFF_LIGHTS;
-      }
-      break;
-    case TURN_OFF_LIGHTS:
-      // Check for button presses during green lights phase
-      if (digitalRead(buttonPin1) == LOW) {
-        // Handle Button 1 press
-        // You can add the necessary logic here
-      }
-      if (digitalRead(buttonPin2) == LOW) {
-        // Handle Button 2 press
-        // You can add the necessary logic here
-      }
-      // Turn off lights after 3 seconds
-      if (millis() - greenLightStartTime >= 3000) {
-        fill_solid(leds, NUM_LEDS, CRGB::Black);
-        FastLED.show();
-        lightState = IDLE;
-      }
-      break;
+case TURN_OFF_LIGHTS:
+  // Turn off lights after 3 seconds
+  if (millis() - greenLightStartTime >= 3000) {
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+    FastLED.show();
+    lightState = IDLE;
   }
+  break;
+}
 
   // Reset button handling
   if (digitalRead(resetPin) == LOW) {
