@@ -21,6 +21,7 @@ unsigned long lapTime1, lapTime2;
 unsigned long bestLap1, bestLap2, recentLap1, recentLap2;
 unsigned long redLightStartTime = 0;
 unsigned long greenLightStartTime = 0;
+unsigned long delayBeforeGreen = 0;
 int lapCount1, lapCount2;
 
 // Pins for buttons and reset
@@ -180,15 +181,18 @@ server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
   server.begin();
 }
 
+// Define the enum for light sequence state
 enum LightSequenceState {
   IDLE,
   RED_LIGHTS,
   GREEN_LIGHTS,
-  TURN_OFF_LIGHTS
+  TURN_OFF_LIGHTS,
+  WAIT_FOR_GREEN_DELAY
 };
 
+// Declare variables for delay before green and start time of delay
 LightSequenceState lightState = IDLE;
-
+unsigned long waitStartTime = 0; // Initialize the variable at the global scope
 
 void loop() {
   // Button 1 handling
@@ -226,12 +230,17 @@ void loop() {
       lastDebounceTime2 = millis();
     }
   }
-
   switch (lightState) {
   case IDLE:
     if (digitalRead(startButtonPin) == LOW) {
-      lightState = RED_LIGHTS;
-      redLightStartTime = millis();
+        // Set a random delay before transitioning to green lights
+        delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);
+        Serial.println("Before random delay generation:");
+        Serial.print("Current delayBeforeGreen: ");
+        Serial.println(delayBeforeGreen);
+        
+        lightState = RED_LIGHTS;
+        redLightStartTime = millis();
     }
     break;
 case RED_LIGHTS:
@@ -239,36 +248,13 @@ case RED_LIGHTS:
     if (millis() - redLightStartTime >= 1000) {
         static int ledIndex = 0; // Variable to track the LED index
         static unsigned long previousLEDTime = 0; // Variable to track the previous LED turning on time
-        static bool delayBeforeGreenInitialized = false; // Flag to indicate if delay before green has been initialized
-        static unsigned long delayBeforeGreen; // Variable to store the delay before turning green
-
-        // Reset delayBeforeGreenInitialized flag at the start of the loop
-        delayBeforeGreenInitialized = false;
-
-        // Check if all LEDs have been turned on
-        if (ledIndex >= NUM_LEDS / 2) {
-            // Initialize delay before green if not already initialized
-            if (!delayBeforeGreenInitialized) {
-                // Generate a random delay before turning green
-                delayBeforeGreen = random(1000, 2001); // Generates a random number between 1000 and 2000 (inclusive)
-                Serial.print("Random delay before green: ");
-                Serial.println(delayBeforeGreen);
-                delayBeforeGreenInitialized = true;
-            }
-
-            // Check if it's time to turn green
-            if (millis() - redLightStartTime >= 1000 + delayBeforeGreen) {
-                lightState = GREEN_LIGHTS; // Move to the green light phase
-                return; // Exit the loop
-            }
-        }
 
         // Calculate the time elapsed since the previous LED turning on time
         unsigned long currentTime = millis();
         unsigned long elapsedTime = currentTime - previousLEDTime;
 
         // Check if it's time to turn on the next LED
-        if (elapsedTime >= 1000) {
+        if (elapsedTime >= 1000 && ledIndex < NUM_LEDS / 2) {
             // Play tone for the current LED
             if (!ledTonePlayed[ledIndex]) {
                 playTone(400, 50); // Play a short beep
@@ -286,6 +272,27 @@ case RED_LIGHTS:
             // Move to the next LED
             ledIndex++;
         }
+
+        // Check if all LEDs have been turned on
+        if (ledIndex >= NUM_LEDS / 2) {
+            // Check if the random delay before transitioning to green lights has passed
+            if (delayBeforeGreen == 0) {
+                // If delayBeforeGreen is 0, proceed to green lights immediately
+                lightState = GREEN_LIGHTS;
+            } else {
+                // If delayBeforeGreen is non-zero, wait for the delay before proceeding to green lights
+                lightState = WAIT_FOR_GREEN_DELAY;
+                waitStartTime = currentTime; // Record the start time of the wait period
+            }
+            return; // Exit the loop
+        }
+    }
+    break;
+case WAIT_FOR_GREEN_DELAY:
+    // Check if the random delay before transitioning to green lights has passed
+    if (millis() - waitStartTime >= delayBeforeGreen) {
+        lightState = GREEN_LIGHTS; // Move to the green light phase
+        return; // Exit the loop
     }
     break;
 case GREEN_LIGHTS:
