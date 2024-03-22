@@ -79,8 +79,6 @@ void setup() {
   randomSeed(esp_random()); // Use ESP hardware number generator for a random seed
   unsigned long seed = esp_random();
   randomSeed(seed);
-  Serial.print("Random seed: ");
-  Serial.println(seed); // Print the random seed to the serial monitor
 
   // Initialize LEDC for FastLED
   ledcSetup(0, 5000, 8);  // LEDC channel 0, 5 kHz PWM, 8-bit resolution
@@ -234,11 +232,7 @@ void loop() {
   case IDLE:
     if (digitalRead(startButtonPin) == LOW) {
         // Set a random delay before transitioning to green lights
-        delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);
-        Serial.println("Before random delay generation:");
-        Serial.print("Current delayBeforeGreen: ");
-        Serial.println(delayBeforeGreen);
-        
+        delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);        
         lightState = RED_LIGHTS;
         redLightStartTime = millis();
     }
