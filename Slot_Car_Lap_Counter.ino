@@ -7,8 +7,8 @@
 #include <FastLED.h>
 
 // Define Wi-Fi credentials
-const char* ssid = "Wokwi-GUEST";
-const char* password = "";
+const char* ssid = "SSID HERE";
+const char* password = "PASSWORD HERE";
 
 // Create instances of SSD1306 displays and AsyncWebServer
 Adafruit_SSD1306 display1(128, 64, &Wire, -1);
@@ -75,7 +75,7 @@ void displayLapInfo(int lane, int lapCount, unsigned long currentLap, String bes
 
 // Setup function
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   randomSeed(esp_random()); // Use ESP hardware number generator for a random seed
   unsigned long seed = esp_random();
   randomSeed(seed);
