@@ -7,8 +7,8 @@
 #include <FastLED.h>
 
 // Define Wi-Fi credentials
-const char* ssid = "SSID HERE";
-const char* password = "PASSWORD HERE";
+const char* ssid = "Wokwi-GUEST";
+const char* password = "";
 
 // Create instances of SSD1306 displays and AsyncWebServer
 Adafruit_SSD1306 display1(128, 64, &Wire, -1);
@@ -70,7 +70,7 @@ void playTone(int frequency, int duration) {
 }
 
 void updateLapInfo(int lane);
-void resetLapInfo();
+//void resetLapInfo();
 void displayLapInfo(int lane, int lapCount, unsigned long currentLap, String bestLap, String recentLap);
 
 // Setup function
@@ -79,6 +79,8 @@ void setup() {
   randomSeed(esp_random()); // Use ESP hardware number generator for a random seed
   unsigned long seed = esp_random();
   randomSeed(seed);
+  Serial.print("Random seed: ");
+  Serial.println(seed); // Print the random seed to the serial monitor
 
   // Initialize LEDC for FastLED
   ledcSetup(0, 5000, 8);  // LEDC channel 0, 5 kHz PWM, 8-bit resolution
@@ -232,7 +234,11 @@ void loop() {
   case IDLE:
     if (digitalRead(startButtonPin) == LOW) {
         // Set a random delay before transitioning to green lights
-        delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);        
+        delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);
+        Serial.println("Before random delay generation:");
+        Serial.print("Current delayBeforeGreen: ");
+        Serial.println(delayBeforeGreen);
+        
         lightState = RED_LIGHTS;
         redLightStartTime = millis();
     }
@@ -310,8 +316,14 @@ case TURN_OFF_LIGHTS:
 }
 
   // Reset button handling
+  //if (digitalRead(resetPin) == LOW) {
+  //  resetLapInfo();
+  //}
+
   if (digitalRead(resetPin) == LOW) {
-    resetLapInfo();
+    Serial.println("Restart button pressed");
+    delay(1000); // Add a small delay for debouncing
+    ESP.restart(); // Restart the ESP32
   }
 
   // Update and display lap information for Lane 1
@@ -372,27 +384,27 @@ void updateLapInfo(int lane) {
 }
 
 // Function to reset lap information
-void resetLapInfo() {
-  lapCounting1 = false;
-  lapCounting2 = false;
-  lapCountInitialized1 = false;
-  lapCountInitialized2 = false;
+//void resetLapInfo() {
+//  lapCounting1 = false;
+//  lapCounting2 = false;
+//  lapCountInitialized1 = false;
+//  lapCountInitialized2 = false;
 
-  startTime1 = 0;
-  startTime2 = 0;
-  lapTime1 = 0;
-  lapTime2 = 0;
-  bestLap1 = 0;
-  bestLap2 = 0;
-  recentLap1 = 0;
-  recentLap2 = 0;
-  lapCount1 = 0;
-  lapCount2 = 0;
+//  startTime1 = 0;
+//  startTime2 = 0;
+//  lapTime1 = 0;
+//  lapTime2 = 0;
+//  bestLap1 = 0;
+//  bestLap2 = 0;
+//  recentLap1 = 0;
+//  recentLap2 = 0;
+//  lapCount1 = 0;
+//  lapCount2 = 0;
 
   // Display initial lap information after reset
-  displayLapInfo(1, lapCount1, 0, "--", "--");
-  displayLapInfo(2, lapCount2, 0, "--", "--");
-}
+//  displayLapInfo(1, lapCount1, 0, "--", "--");
+// displayLapInfo(2, lapCount2, 0, "--", "--");
+//}
 
 // Function to display lap information on the OLED display
 void displayLapInfo(int lane, int lapCount, unsigned long currentLap, String bestLap, String recentLap) {
