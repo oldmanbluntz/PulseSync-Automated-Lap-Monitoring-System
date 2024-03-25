@@ -7,8 +7,8 @@
 #include <FastLED.h>
 
 // Define Wi-Fi credentials
-const char* ssid = "Wokwi-GUEST";
-const char* password = "";
+const char* ssid = "SSID HERE";
+const char* password = "PASSWORD HERE";
 
 // Create instances of SSD1306 displays and AsyncWebServer
 Adafruit_SSD1306 display1(128, 64, &Wire, -1);
@@ -43,7 +43,7 @@ CRGB leds[NUM_LEDS];
 // Debouncing variables
 unsigned long lastDebounceTime1 = 0;
 unsigned long lastDebounceTime2 = 0;
-unsigned long debounceDelay = 50;
+unsigned long debounceDelay = 1;
 
 // Lap counting and initialization flags
 bool lapCounting1 = false;
@@ -58,7 +58,7 @@ int lapPressCount1 = 0;
 int lapPressCount2 = 0;
 
 // Define the delay duration (500 milliseconds = 0.5 seconds)
-const unsigned long lapCountDelay = 500;
+const unsigned long lapCountDelay = 250;
 const unsigned long minDelayBeforeGreen = 1000; // 1 second
 const unsigned long maxDelayBeforeGreen = 2000; // 2 seconds
 
@@ -68,10 +68,37 @@ void playTone(int frequency, int duration) {
   delay(duration);
   noTone(buzzerPin);
 }
-
 void updateLapInfo(int lane);
 //void resetLapInfo();
 void displayLapInfo(int lane, int lapCount, unsigned long currentLap, String bestLap, String recentLap);
+
+// Define the interrupt service routines for the switches
+void button1Pressed() {
+    if (!lapCounting1) {
+        lapCounting1 = true;
+        startTime1 = millis();
+    } else {
+        // Check if enough time has passed since the last button press
+        if ((millis() - lastDebounceTime1) > lapCountDelay) {
+            updateLapInfo(1);
+            lastDebounceTime1 = millis();
+        }
+    }
+    lastDebounceTime1 = millis();
+}
+void button2Pressed() {
+    if (!lapCounting2) {
+        lapCounting2 = true;
+        startTime2 = millis();
+    } else {
+        // Check if enough time has passed since the last button press
+        if ((millis() - lastDebounceTime2) > lapCountDelay) {
+            updateLapInfo(2);
+            lastDebounceTime2 = millis();
+        }
+    }
+    lastDebounceTime2 = millis();
+}
 
 // Setup function
 void setup() {
@@ -93,6 +120,10 @@ void setup() {
     Serial.println("Connecting to WiFi...");
   }
   Serial.println("Connected to WiFi");
+
+  // Attach interrupt service routines to the buttons
+  attachInterrupt(digitalPinToInterrupt(buttonPin1), button1Pressed, FALLING);
+  attachInterrupt(digitalPinToInterrupt(buttonPin2), button2Pressed, FALLING);
 
   // Set up button and reset pin modes
   pinMode(buttonPin1, INPUT_PULLUP);
@@ -119,7 +150,7 @@ void setup() {
 
   // Set up the web server route and response
 server.on("/lap-info", HTTP_GET, [](AsyncWebServerRequest *request){
-  StaticJsonDocument<400> doc;
+  JsonDocument doc;
   doc["lane1"]["lapCount"] = lapCount1;
   doc["lane1"]["recentLap"] = recentLap1 / 1000.0;
   doc["lane1"]["bestLap"] = bestLap1 / 1000.0;
@@ -195,41 +226,6 @@ LightSequenceState lightState = IDLE;
 unsigned long waitStartTime = 0; // Initialize the variable at the global scope
 
 void loop() {
-  // Button 1 handling
-  if ((millis() - lastDebounceTime1) > debounceDelay) {
-    if (digitalRead(buttonPin1) == LOW) {
-      Serial.println("Button 1 pressed");
-      if (!lapCounting1) {
-        lapCounting1 = true;
-        startTime1 = millis();
-      } else {
-        // Check if enough time has passed since the last button press
-        if ((millis() - lastDebounceTime1) > lapCountDelay) {
-          updateLapInfo(1);
-          lastDebounceTime1 = millis();
-        }
-      }
-      lastDebounceTime1 = millis();
-    }
-  }
-
-  // Button 2 handling
-  if ((millis() - lastDebounceTime2) > debounceDelay) {
-    if (digitalRead(buttonPin2) == LOW) {
-      Serial.println("Button 2 pressed");
-      if (!lapCounting2) {
-        lapCounting2 = true;
-        startTime2 = millis();
-      } else {
-        // Check if enough time has passed since the last button press
-        if ((millis() - lastDebounceTime2) > lapCountDelay) {
-          updateLapInfo(2);
-          lastDebounceTime2 = millis();
-        }
-      }
-      lastDebounceTime2 = millis();
-    }
-  }
   switch (lightState) {
   case IDLE:
     if (digitalRead(startButtonPin) == LOW) {
@@ -315,11 +311,6 @@ case TURN_OFF_LIGHTS:
   break;
 }
 
-  // Reset button handling
-  //if (digitalRead(resetPin) == LOW) {
-  //  resetLapInfo();
-  //}
-
   if (digitalRead(resetPin) == LOW) {
     Serial.println("Restart button pressed");
     delay(1000); // Add a small delay for debouncing
@@ -382,29 +373,6 @@ void updateLapInfo(int lane) {
     Serial.println("Lap count: " + String(*lapCount));
   }
 }
-
-// Function to reset lap information
-//void resetLapInfo() {
-//  lapCounting1 = false;
-//  lapCounting2 = false;
-//  lapCountInitialized1 = false;
-//  lapCountInitialized2 = false;
-
-//  startTime1 = 0;
-//  startTime2 = 0;
-//  lapTime1 = 0;
-//  lapTime2 = 0;
-//  bestLap1 = 0;
-//  bestLap2 = 0;
-//  recentLap1 = 0;
-//  recentLap2 = 0;
-//  lapCount1 = 0;
-//  lapCount2 = 0;
-
-  // Display initial lap information after reset
-//  displayLapInfo(1, lapCount1, 0, "--", "--");
-// displayLapInfo(2, lapCount2, 0, "--", "--");
-//}
 
 // Function to display lap information on the OLED display
 void displayLapInfo(int lane, int lapCount, unsigned long currentLap, String bestLap, String recentLap) {
