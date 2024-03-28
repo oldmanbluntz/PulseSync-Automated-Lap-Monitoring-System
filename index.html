@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<div style="text-align:center;">
+  <div class="start-lights">
+    <div class="light" id="light1"></div>
+    <div class="light" id="light2"></div>
+    <div class="light" id="light3"></div>
+    <div class="light" id="light4"></div>
+    <div class="light" id="light5"></div>
+    <div class="light" id="light6"></div>
+    <div class="light" id="light7"></div>
+    <div class="light" id="light8"></div>
+  </div>
+</div>
+<style>
+
+div {
+  background: rgb(0, 0, 57);
+}
+
+h2 {
+  text-align: center;
+  color:  orange;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: rgb(0, 0, 57);
+  color: rgb(208, 255, 20);
+}
+
+/* Float four columns side by side */
+.column {
+  float: left;
+  width: 50%;
+  padding: 0 10px;
+}
+
+/* Remove extra left and right margins, due to padding */
+.row {margin: 0 -5px;}
+
+/* Clear floats after the columns */
+.row:after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* Responsive columns */
+@media screen and (max-width: 600px) {
+  .column {
+    width: 100%;
+    display: block;
+    margin-bottom: 20px;
+  }
+}
+
+/* Style the counter cards */
+.card {
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2);
+  padding: 16px;
+  text-align: center;
+  background-color: #555555;
+  border-radius: 25px;
+}
+
+/* Style the buttons */
+.button {
+  background-color: #00FF00; /* Green */
+  border: none;
+  color: white;
+  padding: 15px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 25px;
+}
+
+.button1 {
+  background-color: #FF0000; /* Red */
+  border: none;
+  color: black;
+  padding: 15px 28px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  cursor: pointer;
+  border-radius: 25px;
+}
+
+.button:hover {
+  box-shadow: 0 12px 16px 0 rgba(0,255,0,0.24), 0 17px 50px 0 rgba(0,255,0,0.19);
+}
+
+.button1:hover {
+  box-shadow: 0 12px 16px 0 rgba(255,119,0,0.24), 0 17px 50px 0 rgba(255,119,0,0.19);
+}
+
+.start-lights {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.light {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: black;
+  margin: 5px;
+}
+
+/* Change light color */
+.light.red {
+  background-color: red;
+}
+
+.light.green {
+  background-color: green;
+}
+</style>
+</head>
+<body>
+
+<h2>P.S.A.L.M.S.</h2>
+<h2>PulseSync Automated Lap Monitoring System</h2>
+<h2>By OldManBlunTZ</h2>
+
+<div class="row">
+  <div class="column">
+    <div class="card">
+      <h3>Lane 1</h3>
+      <p>Laps: <span id="lapCount1">--</span></p>
+      <p>Current Lap: <span id="currentLap1">--</span> s</p>
+      <p>Recent Lap: <span id="recentLap1">--</span> s</p>
+      <p>Best Lap: <span id="bestLap1">--</span> s</p>
+    </div>
+  </div>
+
+  <div class="column">
+    <div class="card">
+      <h3>Lane 2</h3>
+      <p>Laps: <span id="lapCount2">--</span></p>
+      <p>Current Lap: <span id="currentLap2">--</span> s</p>
+      <p>Recent Lap: <span id="recentLap2">--</span> s</p>
+      <p>Best Lap: <span id="bestLap2">--</span> s</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- Start and Reset Buttons -->
+<div style="text-align:center;">
+  <button class="button" id="startButton">Start</button>
+  <button class="button1" id="resetButton">Reset</button>
+</div>
+
+<script>
+// JavaScript code to handle button actions
+document.getElementById('startButton').addEventListener('click', function() {
+  // Send an HTTP GET request to trigger the start action on the ESP32
+  fetch('/start')
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      console.log('Start action triggered successfully');
+    })
+    .catch(error => {
+      console.error('Error triggering start action:', error);
+    });
+});
+
+document.getElementById('resetButton').addEventListener('click', function() {
+  // Send an HTTP GET request to trigger the reset action on the ESP32
+  fetch('/reset')
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      console.log('Reset action triggered successfully');
+    })
+    .catch(error => {
+      console.error('Error triggering reset action:', error);
+    });
+});
+
+// JavaScript code to control the start lights
+function updateStartLights(ledStatus) {
+  // Reset all lights to black
+  document.querySelectorAll('.light').forEach(light => {
+    light.classList.remove('red', 'green');
+  });
+
+  // Set the color of each light based on the LED status
+  for (let i = 0; i < 8; i++) {
+    if (ledStatus[i] === 'R') {
+      document.getElementById('light' + (i + 1)).classList.add('red');
+    } else if (ledStatus[i] === 'G') {
+      document.getElementById('light' + (i + 1)).classList.add('green');
+    }
+  }
+}
+
+// Example usage:
+// updateStartLights(['R', 'R', 'R', 'G', 'G', 'G', 'G', 'G']); // Change the LED status as needed
+</script>
+
+</body>
+</html>
