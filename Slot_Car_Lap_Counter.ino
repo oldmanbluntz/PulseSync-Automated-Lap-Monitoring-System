@@ -5,6 +5,9 @@
 #include <WiFi.h>
 #include <ArduinoJson.h>
 #include <FastLED.h>
+#include <FS.h>
+#include <SPIFFS.h>
+#include <AsyncTCP.h>
 
 // Define Wi-Fi credentials
 const char* ssid = "SSID HERE";
@@ -43,7 +46,7 @@ CRGB leds[NUM_LEDS];
 // Debouncing variables
 unsigned long lastDebounceTime1 = 0;
 unsigned long lastDebounceTime2 = 0;
-unsigned long debounceDelay = 1;
+unsigned long debounceDelay = 50;
 
 // Lap counting and initialization flags
 bool lapCounting1 = false;
@@ -148,65 +151,31 @@ void setup() {
   displayLapInfo(1, lapCount1, 0, "--", "--");
   displayLapInfo(2, lapCount2, 0, "--", "--");
 
-  // Set up the web server route and response
-server.on("/lap-info", HTTP_GET, [](AsyncWebServerRequest *request){
-  JsonDocument doc;
-  doc["lane1"]["lapCount"] = lapCount1;
-  doc["lane1"]["recentLap"] = recentLap1 / 1000.0;
-  doc["lane1"]["bestLap"] = bestLap1 / 1000.0;
-  doc["lane1"]["currentLap"] = lapCounting1 ? (millis() - startTime1) / 1000.0 : static_cast<double>(0);
-  doc["lane2"]["lapCount"] = lapCount2;
-  doc["lane2"]["recentLap"] = recentLap2 / 1000.0;
-  doc["lane2"]["bestLap"] = bestLap2 / 1000.0;
-  doc["lane2"]["currentLap"] = lapCounting2 ? (millis() - startTime2) / 1000.0 : static_cast<double>(0);
-  String json;
-  serializeJson(doc, json);
-  request->send(200, "application/json", json);
+if(!SPIFFS.begin(true)){
+    Serial.println("An error occurred while mounting SPIFFS");
+    return;
+  }
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SPIFFS, "/index.html", "text/html");
+  });
+  server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request){
+    Serial.println("Reset action triggered");
+    delay(1000); // Add a delay for stability (optional)
+    ESP.restart(); // Restart the ESP32
+    request->send(200, "text/plain", "Reset action triggered successfully");
+  });
+  server.on("/start", HTTP_GET, [](AsyncWebServerRequest *request){
+    Serial.println("Received /start request"); // Debug message to indicate the request is received
+    Serial.println("Start action triggered"); // Debug message to indicate the start action is triggered
+    // Simulate the button press action for startButtonPin (pin 25)
+    digitalWrite(startButtonPin, LOW);
+    Serial.println("startbuttonpin pressed LOW"); // Simulate button press (assuming LOW triggers the action)    
+    delay(500); // Add a small delay for stability
+    digitalWrite(startButtonPin, HIGH); // Release the button
+    Serial.println("startbuttonpin depressed HIGH");
+    request->send(200, "text/plain", "Start action triggered successfully");
 });
-
-  // Set up the web server route and response
-server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    String html = "<html><head>";
-    html += "<style>";
-    html += ".lane-container { display: flex; justify-content: space-around; }";
-    html += ".lane { flex: 1; text-align: center; }";
-    html += "</style>";
-    html += "</head><body>";
-    html += "<div class='lane-container'>";
-    html += "<div class='lane'>";
-    html += "<h1>Lane 1</h1>";
-    html += "<p>Laps: <span id='lapCount1'>--</span></p>";
-    html += "<p>Current Lap: <span id='currentLap1'>--</span> s</p>";
-    html += "<p>Recent Lap: <span id='recentLap1'>--</span> s</p>";
-    html += "<p>Best Lap: <span id='bestLap1'>--</span> s</p>";
-    html += "</div>";
-    html += "<div class='lane'>";
-    html += "<h1>Lane 2</h1>";
-    html += "<p>Laps: <span id='lapCount2'>--</span></p>";
-    html += "<p>Current Lap: <span id='currentLap2'>--</span> s</p>";
-    html += "<p>Recent Lap: <span id='recentLap2'>--</span> s</p>";
-    html += "<p>Best Lap: <span id='bestLap2'>--</span> s</p>";
-    html += "</div>";
-    html += "</div>";
-    html += "<script>";
-    html += "setInterval(function() {";
-    html += "fetch('/lap-info')";
-    html += ".then(response => response.json())";
-    html += ".then(data => {";
-    html += "document.getElementById('lapCount1').textContent = data.lane1.lapCount;";
-    html += "document.getElementById('currentLap1').textContent = data.lane1.currentLap;";
-    html += "document.getElementById('recentLap1').textContent = data.lane1.recentLap;";
-    html += "document.getElementById('bestLap1').textContent = data.lane1.bestLap;";
-    html += "document.getElementById('lapCount2').textContent = data.lane2.lapCount;";
-    html += "document.getElementById('currentLap2').textContent = data.lane2.currentLap;";
-    html += "document.getElementById('recentLap2').textContent = data.lane2.recentLap;";
-    html += "document.getElementById('bestLap2').textContent = data.lane2.bestLap;";
-    html += "});";
-    html += "}, 25);"; // Decreased interval for more frequent updates
-    html += "</script>";
-    html += "</body></html>";
-    request->send(200, "text/html", html);
-});
+  // Add more routes as needed for other files  
 
   // Start the web server
   server.begin();
