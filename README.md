@@ -17,6 +17,7 @@ https://randomnerdtutorials.com/vs-code-platformio-ide-esp32-esp8266-arduino/
 https://randomnerdtutorials.com/esp32-vs-code-platformio-spiffs/
 
 If you would like to see the wiring layout, and see how it operates with just simple buttons, check out the build on Wokwi I have made. Some of the code is there as well.
+
 https://wokwi.com/projects/388409586717645825
 
 The surrent hardware consists of:
