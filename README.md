@@ -31,3 +31,9 @@ final phase of the red lights and the green lights, so you can't time in your he
 Here is a shot of the webportal. It's currently set to update every 25 milliseconds. You can modify that on line 130.
 
 ![Screenshot 2024-02-12 110554](https://github.com/oldmanbluntz/Slot-Car-Lap-Counter/assets/2407099/90e60df0-9c61-4c25-8916-997d475fa514)
+
+I have been using Visual Studio Code to upload the files to the ESP32. I'm using PlatformIO, and have installed the ESP-IDF extensions for this.
+PlatformIO has the ability to build/upload the files to the SPIFFS file system, as well as built/upload the sketch to the ESP32. You will need
+the SPIFFS file system to house the index.html file. 
+
+Here is a tutorial on how to upload files to the SPIFFS partition on the ESP32
