@@ -13,6 +13,7 @@ the SPIFFS file system to house the index.html file. I have also included my pla
 Here are two tutorials, one on how to use Vicual Studio Code to program an ESP32, and one on how to upload files to the SPIFFS partition on the ESP32:
 
 https://randomnerdtutorials.com/vs-code-platformio-ide-esp32-esp8266-arduino/
+
 https://randomnerdtutorials.com/esp32-vs-code-platformio-spiffs/
 
 If you would like to see the wiring layout, and see how it operates with just simple buttons, check out the build on Wokwi I have made. Some of the code is there as well.
