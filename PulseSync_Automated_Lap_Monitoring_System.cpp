@@ -33,6 +33,7 @@ const int buttonPin2 = 27;
 const int resetPin = 26;
 const int startButtonPin = 25;
 const int buzzerPin = 16;
+int startButtonPinState = LOW;
 
 // Pins for start lights
 #define LED_PIN     13  // Pin connected to the LED strip
@@ -165,14 +166,20 @@ if(!SPIFFS.begin(true)){
     request->send(200, "text/plain", "Reset action triggered successfully");
   });
   server.on("/start", HTTP_GET, [](AsyncWebServerRequest *request){
-    Serial.println("Received /start request"); // Debug message to indicate the request is received
-    Serial.println("Start action triggered"); // Debug message to indicate the start action is triggered
-    // Simulate the button press action for startButtonPin (pin 25)
-    digitalWrite(startButtonPin, LOW);
-    Serial.println("startbuttonpin pressed LOW"); // Simulate button press (assuming LOW triggers the action)    
-    delay(500); // Add a small delay for stability
-    digitalWrite(startButtonPin, HIGH); // Release the button
-    Serial.println("startbuttonpin depressed HIGH");
+    Serial.println("Received /start request");
+    Serial.println("Start action triggered");
+    
+    // Print current GPIO pin state
+    Serial.print("Current state of startButtonPin: ");
+    Serial.println(digitalRead(startButtonPin));
+    
+    // Toggle the GPIO pin state
+    digitalWrite(startButtonPin, !digitalRead(startButtonPin)); // Toggle the pin state
+
+    // Print updated GPIO pin state
+    Serial.print("Updated state of startButtonPin: ");
+    Serial.println(digitalRead(startButtonPin));
+
     request->send(200, "text/plain", "Start action triggered successfully");
 });
   // Add more routes as needed for other files  
