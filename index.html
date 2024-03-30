@@ -170,6 +170,7 @@ body {
 // JavaScript code to handle button actions
 document.getElementById('startButton').addEventListener('click', function() {
   // Send an HTTP GET request to trigger the start action on the ESP32
+  console.log('Sending start action request...');
   fetch('/start')
     .then(response => {
       if (!response.ok) {
