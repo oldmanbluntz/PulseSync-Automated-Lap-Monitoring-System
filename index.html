@@ -2,18 +2,6 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<div style="text-align:center;">
-  <div class="start-lights">
-    <div class="light" id="light1"></div>
-    <div class="light" id="light2"></div>
-    <div class="light" id="light3"></div>
-    <div class="light" id="light4"></div>
-    <div class="light" id="light5"></div>
-    <div class="light" id="light6"></div>
-    <div class="light" id="light7"></div>
-    <div class="light" id="light8"></div>
-  </div>
-</div>
 <style>
 
 div {
@@ -157,13 +145,26 @@ body {
       <p>Best Lap: <span id="bestLap2">--</span> s</p>
     </div>
   </div>
-
 </div>
 
 <!-- Start and Reset Buttons -->
 <div style="text-align:center;">
   <button class="button" id="startButton">Start</button>
   <button class="button1" id="resetButton">Reset</button>
+</div>
+
+<!-- LED Representation -->
+<div style="text-align:center;">
+  <div class="start-lights">
+    <div class="light" id="light1"></div>
+    <div class="light" id="light2"></div>
+    <div class="light" id="light3"></div>
+    <div class="light" id="light4"></div>
+    <div class="light" id="light5"></div>
+    <div class="light" id="light6"></div>
+    <div class="light" id="light7"></div>
+    <div class="light" id="light8"></div>
+  </div>
 </div>
 
 <script>
@@ -197,19 +198,43 @@ document.getElementById('resetButton').addEventListener('click', function() {
     });
 });
 
+// JavaScript code to periodically update lap information
+setInterval(function() {
+  fetch('/lap-info')
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById('lapCount1').textContent = data.lane1.lapCount;
+      document.getElementById('currentLap1').textContent = data.lane1.currentLap;
+      document.getElementById('recentLap1').textContent = data.lane1.recentLap;
+      document.getElementById('bestLap1').textContent = data.lane1.bestLap;
+      document.getElementById('lapCount2').textContent = data.lane2.lapCount;
+      document.getElementById('currentLap2').textContent = data.lane2.currentLap;
+      document.getElementById('recentLap2').textContent = data.lane2.recentLap;
+      document.getElementById('bestLap2').textContent = data.lane2.bestLap;
+
+      // Now, update the lights
+      const ledIndex = data.ledIndex; // Get the LED index from the server
+      updateStartLights(ledIndex);
+    });
+}, 25);
+
 // JavaScript code to control the start lights
-function updateStartLights(ledStatus) {
+function updateStartLights(ledIndex) {
   // Reset all lights to black
   document.querySelectorAll('.light').forEach(light => {
     light.classList.remove('red', 'green');
   });
 
-  // Set the color of each light based on the LED status
-  for (let i = 0; i < 8; i++) {
-    if (ledStatus[i] === 'R') {
+  // Set the color of each light based on the LED index
+  for (let i = 0; i < NUM_LEDS / 2; i++) {
+    if (i < ledIndex) {
+      // Turn on LEDs up to the current index
       document.getElementById('light' + (i + 1)).classList.add('red');
-    } else if (ledStatus[i] === 'G') {
+      document.getElementById('light' + (NUM_LEDS - i)).classList.add('red');
+    } else if (i === ledIndex) {
+      // Turn on the LED at the current index
       document.getElementById('light' + (i + 1)).classList.add('green');
+      document.getElementById('light' + (NUM_LEDS - i)).classList.add('green');
     }
   }
 }
