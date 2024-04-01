@@ -5,15 +5,16 @@
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
+#define FASTLED_INTERNAL
 #include <FastLED.h>
 #include <FS.h>
 #include <SPIFFS.h>
 #include <AsyncTCP.h>
-#include <AsyncElegantOTA.h>
+#include <ElegantOTA.h>
 
 // Define Wi-Fi credentials
-const char* ssid = "SSID";
-const char* password = "PASSWORD";
+const char* ssid = "The Promised LAN";
+const char* password = "goldenbitch";
 
 // Create instances of SSD1306 displays and AsyncWebServer
 Adafruit_SSD1306 display1(128, 64, &Wire, -1);
@@ -35,6 +36,7 @@ const int buttonPin2 = 27;
 const int resetPin = 26;
 const int startButtonPin = 25;
 const int buzzerPin = 16;
+static int ledIndex = 0; // Variable to track the LED index
 
 // Pins for start lights
 #define LED_PIN     13  // Pin connected to the LED strip
@@ -46,6 +48,7 @@ const int buzzerPin = 16;
 CRGB leds[NUM_LEDS];
 
 // Debouncing variables
+unsigned long lastButtonPress = 0;
 unsigned long lastDebounceTime1 = 0;
 unsigned long lastDebounceTime2 = 0;
 unsigned long debounceDelay = 50;
@@ -118,92 +121,16 @@ enum LightSequenceState {
 LightSequenceState lightState = IDLE;
 unsigned long waitStartTime = 0; // Initialize the variable at the global scope
 
-void lightStartSequence() {
-  Serial.println("Starting light start sequence"); // Debug message
-  switch (lightState) {
-    case IDLE:
-      if (digitalRead(startButtonPin) == LOW) {
-        // Set a random delay before transitioning to green lights
-        delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);
-        Serial.println("Before random delay generation:");
-        Serial.print("Current delayBeforeGreen: ");
-        Serial.println(delayBeforeGreen);
-
-        lightState = RED_LIGHTS;
-        redLightStartTime = millis();
-      }
-      break;
-    case RED_LIGHTS:
-      // Turn on outer LEDs one by one with a tone
-      if (millis() - redLightStartTime >= 1000) {
-        static int ledIndex = 0; // Variable to track the LED index
-        static unsigned long previousLEDTime = 0; // Variable to track the previous LED turning on time
-
-        // Calculate the time elapsed since the previous LED turning on time
-        unsigned long currentTime = millis();
-        unsigned long elapsedTime = currentTime - previousLEDTime;
-
-        // Check if it's time to turn on the next LED
-        if (elapsedTime >= 1000 && ledIndex < NUM_LEDS / 2) {
-          // Play tone for the current LED
-          if (!ledTonePlayed[ledIndex]) {
-            playTone(400, 50); // Play a short beep
-            ledTonePlayed[ledIndex] = true; // Mark the tone as played for this LED
-          }
-
-          // Turn on the current LED
-          leds[ledIndex] = CRGB::Red;
-          leds[NUM_LEDS - 1 - ledIndex] = CRGB::Red;
-          FastLED.show();
-
-          // Update the previous LED turning on time
-          previousLEDTime = currentTime;
-
-          // Move to the next LED
-          ledIndex++;
-        }
-
-        // Check if all LEDs have been turned on
-        if (ledIndex >= NUM_LEDS / 2) {
-          // Check if the random delay before transitioning to green lights has passed
-          if (delayBeforeGreen == 0) {
-            // If delayBeforeGreen is 0, proceed to green lights immediately
-            lightState = GREEN_LIGHTS;
-          } else {
-            // If delayBeforeGreen is non-zero, wait for the delay before proceeding to green lights
-            lightState = WAIT_FOR_GREEN_DELAY;
-            waitStartTime = currentTime; // Record the start time of the wait period
-          }
-          return; // Exit the function
-        }
-      }
-      break;
-    case WAIT_FOR_GREEN_DELAY:
-      // Check if the random delay before transitioning to green lights has passed
-      if (millis() - waitStartTime >= delayBeforeGreen) {
-        lightState = GREEN_LIGHTS; // Move to the green light phase
-        return; // Exit the function
-      }
-      break;
-    case GREEN_LIGHTS:
-      // Turn all LEDs green after a random delay
-      if (millis() - redLightStartTime >= 5000) {
-        fill_solid(leds, NUM_LEDS, CRGB::Green);
-        FastLED.show();
-        playTone(1000, 250); // Play a short beep
-        greenLightStartTime = millis();
-        lightState = TURN_OFF_LIGHTS;
-      }
-      break;
-    case TURN_OFF_LIGHTS:
-      // Turn off lights after 3 seconds
-      if (millis() - greenLightStartTime >= 3000) {
-        fill_solid(leds, NUM_LEDS, CRGB::Black);
-        FastLED.show();
-        lightState = IDLE;
-      }
-      break;
-  }
+void startSequence() {
+    // No need to check digitalRead(startButtonPin) here
+    // Directly set up the sequence start
+    delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);
+    Serial.println("Before random delay generation:");
+    Serial.print("Current delayBeforeGreen: ");
+    Serial.println(delayBeforeGreen);
+    
+    lightState = RED_LIGHTS;
+    redLightStartTime = millis();
 }
 
 // Setup function
@@ -258,8 +185,7 @@ if(!SPIFFS.begin(true)){
     Serial.println("An error occurred while mounting SPIFFS");
     return;
   }
-   // Set up the web server route and response
-  server.on("/lap-info", HTTP_GET, [](AsyncWebServerRequest *request){
+   server.on("/lap-info", HTTP_GET, [](AsyncWebServerRequest *request){
     JsonDocument doc;
     doc["lane1"]["lapCount"] = lapCount1;
     doc["lane1"]["recentLap"] = recentLap1 / 1000.0;
@@ -269,14 +195,18 @@ if(!SPIFFS.begin(true)){
     doc["lane2"]["recentLap"] = recentLap2 / 1000.0;
     doc["lane2"]["bestLap"] = bestLap2 / 1000.0;
     doc["lane2"]["currentLap"] = lapCounting2 ? (millis() - startTime2) / 1000.0 : static_cast<double>(0);
+
+    // Add the LED index to the JSON response
+    doc["ledIndex"] = ledIndex;
+
     String json;
     serializeJson(doc, json);
     request->send(200, "application/json", json);
-  });
+});
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(SPIFFS, "/index.html", "text/html");
   });
-  AsyncElegantOTA.begin(&server);    // Start ElegantOTA
+  ElegantOTA.begin(&server);    // Start ElegantOTA
   server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request){
     Serial.println("Reset action triggered");
     delay(1000); // Add a delay for stability (optional)
@@ -284,11 +214,12 @@ if(!SPIFFS.begin(true)){
     request->send(200, "text/plain", "Reset action triggered successfully");
   });
   server.on("/start", HTTP_GET, [](AsyncWebServerRequest *request){
-    Serial.println("Received /start request");
-    Serial.println("Start action triggered");
-    // Call the function to start the light sequence
-    lightStartSequence();
-    request->send(200, "text/plain", "Start action triggered successfully");
+    Serial.println("Received /start web request");
+    // Ensure this request initiates the sequence properly.
+    // Assuming `startSequence()` is a new function you will create that
+    // encapsulates the necessary steps to start the sequence.
+    startSequence();
+    request->send(200, "text/plain", "Start sequence initiated");
 });
   // Add more routes as needed for other files  
 
@@ -297,11 +228,97 @@ if(!SPIFFS.begin(true)){
 }
 
 void loop() {
-  // Check if the button attached to pin 25 is pressed
-  if (digitalRead(startButtonPin) == LOW) {
-    // Call the function to start the light sequence
-    lightStartSequence();
+  ElegantOTA.loop();
+  // Current time
+    unsigned long currentTime = millis();
+    
+    // Read the button state
+    int buttonState = digitalRead(startButtonPin);
+    
+    // Check if button is pressed (assuming active LOW) and debounce
+    if (buttonState == LOW && (currentTime - lastButtonPress) > debounceDelay) {
+        // Update the last button press time
+        lastButtonPress = currentTime;
+        
+        // Initiate the start sequence
+        startSequence();
+        
+        // Debounce delay to avoid bouncing issues - might be optional here depending on your setup
+        delay(debounceDelay);
+    }
+  switch (lightState) {
+  case IDLE:
+    break;
+case RED_LIGHTS:
+    // Turn on outer LEDs one by one with a tone
+    if (millis() - redLightStartTime >= 1000) {
+        static unsigned long previousLEDTime = 0; // Variable to track the previous LED turning on time
+
+        // Calculate the time elapsed since the previous LED turning on time
+        unsigned long currentTime = millis();
+        unsigned long elapsedTime = currentTime - previousLEDTime;
+
+        // Check if it's time to turn on the next LED
+        if (elapsedTime >= 1000 && ledIndex < NUM_LEDS / 2) {
+            // Play tone for the current LED
+            if (!ledTonePlayed[ledIndex]) {
+                playTone(400, 50); // Play a short beep
+                ledTonePlayed[ledIndex] = true; // Mark the tone as played for this LED
+            }
+
+            // Turn on the current LED
+            leds[ledIndex] = CRGB::Red;
+            leds[NUM_LEDS - 1 - ledIndex] = CRGB::Red;
+            FastLED.show();
+
+            // Update the previous LED turning on time
+            previousLEDTime = currentTime;
+
+            // Move to the next LED
+            ledIndex++;
+        }
+
+        // Check if all LEDs have been turned on
+        if (ledIndex >= NUM_LEDS / 2) {
+            // Check if the random delay before transitioning to green lights has passed
+            if (delayBeforeGreen == 0) {
+                // If delayBeforeGreen is 0, proceed to green lights immediately
+                lightState = GREEN_LIGHTS;
+            } else {
+                // If delayBeforeGreen is non-zero, wait for the delay before proceeding to green lights
+                lightState = WAIT_FOR_GREEN_DELAY;
+                waitStartTime = currentTime; // Record the start time of the wait period
+            }
+            return; // Exit the loop
+        }
+    }
+    break;
+case WAIT_FOR_GREEN_DELAY:
+    // Check if the random delay before transitioning to green lights has passed
+    if (millis() - waitStartTime >= delayBeforeGreen) {
+        lightState = GREEN_LIGHTS; // Move to the green light phase
+        return; // Exit the loop
+    }
+    break;
+case GREEN_LIGHTS:
+  // Turn all LEDs green after a random delay
+  if (millis() - redLightStartTime >= 5000) {
+    fill_solid(leds, NUM_LEDS, CRGB::Green);
+    FastLED.show();
+    playTone(1000, 250); // Play a short beep
+    greenLightStartTime = millis();
+    lightState = TURN_OFF_LIGHTS;
   }
+  break;
+case TURN_OFF_LIGHTS:
+  // Turn off lights after 3 seconds
+  if (millis() - greenLightStartTime >= 3000) {
+    fill_solid(leds, NUM_LEDS, CRGB::Black);
+    FastLED.show();
+    lightState = IDLE;
+  }
+  break;
+}
 
   if (digitalRead(resetPin) == LOW) {
     Serial.println("Restart button pressed");
