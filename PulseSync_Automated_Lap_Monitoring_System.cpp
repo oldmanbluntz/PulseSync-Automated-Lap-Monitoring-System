@@ -106,6 +106,14 @@ void button2Pressed() {
     lastDebounceTime2 = millis();
 }
 
+void calculateAndSetDelayBeforeGreen() {
+    // Generate a random delay within the specified range
+    delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);
+    Serial.println("Before random delay generation:");
+    Serial.print("Calculated delayBeforeGreen: ");
+    Serial.println(delayBeforeGreen);
+}
+
 // Define the enum for light sequence state
 enum LightSequenceState {
   IDLE,
@@ -119,13 +127,23 @@ enum LightSequenceState {
 LightSequenceState lightState = IDLE;
 unsigned long waitStartTime = 0; // Initialize the variable at the global scope
 
+void resetStartSequence() {
+    lightState = IDLE; // Reset the light sequence state
+    for(int i = 0; i < NUM_LEDS; i++) {
+        leds[i] = CRGB::Black; // Turn off all LEDs
+        ledTonePlayed[i] = false; // Reset the tone played flags for each LED
+    }
+    FastLED.show(); // Update the LED strip to apply the off state
+}
+
 void startSequence() {
-    // No need to check digitalRead(startButtonPin) here
-    // Directly set up the sequence start
-    delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);
-    Serial.println("Before random delay generation:");
-    Serial.print("Current delayBeforeGreen: ");
-    Serial.println(delayBeforeGreen);
+  randomSeed(esp_random());
+  unsigned long seed = esp_random();
+  randomSeed(seed);
+  Serial.print("Random seed: ");
+  Serial.println(seed); // Print the random seed to the serial monitor
+    resetStartSequence();
+    calculateAndSetDelayBeforeGreen();
     
     lightState = RED_LIGHTS;
     redLightStartTime = millis();
@@ -134,11 +152,6 @@ void startSequence() {
 // Setup function
 void setup() {
   Serial.begin(115200);
-  randomSeed(esp_random()); // Use ESP hardware number generator for a random seed
-  unsigned long seed = esp_random();
-  randomSeed(seed);
-  Serial.print("Random seed: ");
-  Serial.println(seed); // Print the random seed to the serial monitor
 
   // Initialize LEDC for FastLED
   ledcSetup(0, 5000, 8);  // LEDC channel 0, 5 kHz PWM, 8-bit resolution
@@ -210,9 +223,6 @@ if(!SPIFFS.begin(true)){
   });
   server.on("/start", HTTP_GET, [](AsyncWebServerRequest *request){
     Serial.println("Received /start web request");
-    // Ensure this request initiates the sequence properly.
-    // Assuming `startSequence()` is a new function you will create that
-    // encapsulates the necessary steps to start the sequence.
     startSequence();
     request->send(200, "text/plain", "Start sequence initiated");
 });
@@ -224,23 +234,21 @@ if(!SPIFFS.begin(true)){
 
 void loop() {
   ElegantOTA.loop();
-  // Current time
-    unsigned long currentTime = millis();
+  static int lastButtonState = HIGH; // Assume button starts unpressed
+  static unsigned long lastButtonPress = 0; 
+  unsigned long currentTime = millis();
     
-    // Read the button state
-    int buttonState = digitalRead(startButtonPin);
+  int buttonState = digitalRead(startButtonPin);
     
-    // Check if button is pressed (assuming active LOW) and debounce
-    if (buttonState == LOW && (currentTime - lastButtonPress) > debounceDelay) {
-        // Update the last button press time
-        lastButtonPress = currentTime;
+  if (buttonState == LOW && lastButtonState == HIGH && (currentTime - lastButtonPress) > debounceDelay) {
+      lastButtonPress = currentTime; // Update the last button press time
         
-        // Initiate the start sequence
-        startSequence();
+      // Initiate the start sequence
+      startSequence();
+  }
+      
+    lastButtonState = buttonState;
         
-        // Debounce delay to avoid bouncing issues - might be optional here depending on your setup
-        // delay(debounceDelay);
-    }
   switch (lightState) {
   case IDLE:
     break;
@@ -276,6 +284,7 @@ case RED_LIGHTS:
 
         // Check if all LEDs have been turned on
         if (ledIndex >= NUM_LEDS / 2) {
+            ledIndex = 0;
             // Check if the random delay before transitioning to green lights has passed
             if (delayBeforeGreen == 0) {
                 // If delayBeforeGreen is 0, proceed to green lights immediately
