@@ -12,13 +12,14 @@
 #include <ElegantOTA.h>
 
 // Define Wi-Fi credentials
-const char* ssid = "SSID";
-const char* password = "PASSWORD";
+const char* ssid = "The Promised LAN";
+const char* password = "goldenbitch";
 
 // Create instances of SSD1306 displays and AsyncWebServer
 Adafruit_SSD1306 display1(128, 64, &Wire, -1);
 Adafruit_SSD1306 display2(128, 64, &Wire, -1);
 AsyncWebServer server(80);
+AsyncWebSocket ws("/ws");
 
 // Variables for lap timing and counting
 unsigned long startTime1, startTime2;
@@ -37,8 +38,8 @@ const int startButtonPin = 25;
 const int buzzerPin = 16;
 
 // Pins for start lights
-#define LED_PIN     13  // Pin connected to the LED strip
-#define NUM_LEDS    8   // Number of LEDs in the strip
+#define LED_PIN     13
+#define NUM_LEDS    8
 #define LED_TYPE    WS2812B
 #define COLOR_ORDER GRB
 
@@ -49,24 +50,25 @@ CRGB leds[NUM_LEDS];
 unsigned long lastButtonPress = 0;
 unsigned long lastDebounceTime1 = 0;
 unsigned long lastDebounceTime2 = 0;
-unsigned long debounceDelay = 50;
+unsigned long debounceDelay = 100;
 
 // Lap counting and initialization flags
 bool lapCounting1 = false;
 bool lapCounting2 = false;
 bool lapCountInitialized1 = false;
 bool lapCountInitialized2 = false;
-bool ledTonePlayed[NUM_LEDS] = {false}; // Array to keep track of whether tone has been played for each LED
+bool ledTonePlayed[NUM_LEDS] = {false};
+bool isFirstLap1 = true;
+bool isFirstLap2 = true;
 
-
-// Lap press counters (not currently used in the code)
+// Lap press counters
 int lapPressCount1 = 0;
 int lapPressCount2 = 0;
 
-// Define the delay duration (500 milliseconds = 0.5 seconds)
+// Define the delay duration
 const unsigned long lapCountDelay = 250;
-const unsigned long minDelayBeforeGreen = 1000; // 1 second
-const unsigned long maxDelayBeforeGreen = 2000; // 2 seconds
+const unsigned long minDelayBeforeGreen = 1000;
+const unsigned long maxDelayBeforeGreen = 2000;
 
 // Function to play tone
 void playTone(int frequency, int duration) {
@@ -78,36 +80,7 @@ void updateLapInfo(int lane);
 //void resetLapInfo();
 void displayLapInfo(int lane, int lapCount, unsigned long currentLap, String bestLap, String recentLap);
 
-// Define the interrupt service routines for the switches
-void button1Pressed() {
-    if (!lapCounting1) {
-        lapCounting1 = true;
-        startTime1 = millis();
-    } else {
-        // Check if enough time has passed since the last button press
-        if ((millis() - lastDebounceTime1) > lapCountDelay) {
-            updateLapInfo(1);
-            lastDebounceTime1 = millis();
-        }
-    }
-    lastDebounceTime1 = millis();
-}
-void button2Pressed() {
-    if (!lapCounting2) {
-        lapCounting2 = true;
-        startTime2 = millis();
-    } else {
-        // Check if enough time has passed since the last button press
-        if ((millis() - lastDebounceTime2) > lapCountDelay) {
-            updateLapInfo(2);
-            lastDebounceTime2 = millis();
-        }
-    }
-    lastDebounceTime2 = millis();
-}
-
 void calculateAndSetDelayBeforeGreen() {
-    // Generate a random delay within the specified range
     delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);
     Serial.println("Before random delay generation:");
     Serial.print("Calculated delayBeforeGreen: ");
@@ -125,7 +98,7 @@ enum LightSequenceState {
 
 // Declare variables for delay before green and start time of delay
 LightSequenceState lightState = IDLE;
-unsigned long waitStartTime = 0; // Initialize the variable at the global scope
+unsigned long waitStartTime = 0;
 
 void resetStartSequence() {
     lightState = IDLE; // Reset the light sequence state
@@ -143,10 +116,38 @@ void startSequence() {
   Serial.print("Random seed: ");
   Serial.println(seed); // Print the random seed to the serial monitor
     resetStartSequence();
-    calculateAndSetDelayBeforeGreen();
-    
+    calculateAndSetDelayBeforeGreen();    
     lightState = RED_LIGHTS;
     redLightStartTime = millis();
+}
+
+void notifyClients() {
+  JsonDocument doc;
+  // Prepare comprehensive lap information for each lane
+  // Here, we directly use lapCount1 and lapCount2 as they are initialized to 0 on the first press and incremented thereafter.
+  doc["lane1"]["lapCount"] = isFirstLap1 ? "--" : String(lapCount1); // "--" for not started, or the actual count
+  doc["lane1"]["recentLap"] = recentLap1 / 1000.0;
+  doc["lane1"]["bestLap"] = bestLap1 / 1000.0;
+  doc["lane1"]["currentLap"] = lapCounting1 ? (millis() - startTime1) / 1000.0 : static_cast<double>(-1); // -1 or similar to indicate not started
+
+  doc["lane2"]["lapCount"] = isFirstLap2 ? "--" : String(lapCount2);
+  doc["lane2"]["recentLap"] = recentLap2 / 1000.0;
+  doc["lane2"]["bestLap"] = bestLap2 / 1000.0;
+  doc["lane2"]["currentLap"] = lapCounting2 ? (millis() - startTime2) / 1000.0 : static_cast<double>(-1);
+
+  String message;
+  serializeJson(doc, message);
+  ws.textAll(message);
+}
+
+void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
+               AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  if (type == WS_EVT_CONNECT) {
+    Serial.println("Client connected");
+    notifyClients(); // Optionally send current state upon new connection
+  } else if (type == WS_EVT_DISCONNECT) {
+    Serial.println("Client disconnected");
+  }
 }
 
 // Setup function
@@ -154,8 +155,8 @@ void setup() {
   Serial.begin(115200);
 
   // Initialize LEDC for FastLED
-  ledcSetup(0, 5000, 8);  // LEDC channel 0, 5 kHz PWM, 8-bit resolution
-    ledcAttachPin(LED_PIN, 13);  // Attach LED_PIN to LEDC channel 0
+  ledcSetup(0, 5000, 8);
+    ledcAttachPin(LED_PIN, 13);
 
   // Connect to Wi-Fi
   WiFi.begin(ssid, password);
@@ -165,9 +166,9 @@ void setup() {
   }
   Serial.println("Connected to WiFi");
 
-  // Attach interrupt service routines to the buttons
-  attachInterrupt(digitalPinToInterrupt(buttonPin1), button1Pressed, FALLING);
-  attachInterrupt(digitalPinToInterrupt(buttonPin2), button2Pressed, FALLING);
+  ws.onEvent(onWsEvent);
+  server.addHandler(&ws);
+  server.begin();
 
   // Set up button and reset pin modes
   pinMode(buttonPin1, INPUT_PULLUP);
@@ -196,31 +197,20 @@ if(!SPIFFS.begin(true)){
     Serial.println("An error occurred while mounting SPIFFS");
     return;
   }
-   // Set up the web server route and response
-  server.on("/lap-info", HTTP_GET, [](AsyncWebServerRequest *request){
-    JsonDocument doc;
-    doc["lane1"]["lapCount"] = lapCount1;
-    doc["lane1"]["recentLap"] = recentLap1 / 1000.0;
-    doc["lane1"]["bestLap"] = bestLap1 / 1000.0;
-    doc["lane1"]["currentLap"] = lapCounting1 ? (millis() - startTime1) / 1000.0 : static_cast<double>(0);
-    doc["lane2"]["lapCount"] = lapCount2;
-    doc["lane2"]["recentLap"] = recentLap2 / 1000.0;
-    doc["lane2"]["bestLap"] = bestLap2 / 1000.0;
-    doc["lane2"]["currentLap"] = lapCounting2 ? (millis() - startTime2) / 1000.0 : static_cast<double>(0);
-    String json;
-    serializeJson(doc, json);
-    request->send(200, "application/json", json);
-  });
+
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(SPIFFS, "/index.html", "text/html");
   });
+
   ElegantOTA.begin(&server);    // Start ElegantOTA
+
   server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request){
     Serial.println("Reset action triggered");
     delay(1000); // Add a delay for stability (optional)
     ESP.restart(); // Restart the ESP32
     request->send(200, "text/plain", "Reset action triggered successfully");
   });
+
   server.on("/start", HTTP_GET, [](AsyncWebServerRequest *request){
     Serial.println("Received /start web request");
     startSequence();
@@ -234,15 +224,57 @@ if(!SPIFFS.begin(true)){
 
 void loop() {
   ElegantOTA.loop();
-  static int lastButtonState = HIGH; // Assume button starts unpressed
+  static int lastButtonState = HIGH;
   static unsigned long lastButtonPress = 0; 
-  unsigned long currentTime = millis();
+  bool currentButtonState1 = digitalRead(buttonPin1);
+bool currentButtonState2 = digitalRead(buttonPin2);
+unsigned long currentTime = millis();
+
+// Debounce and process Button 1 press
+if (currentButtonState1 == LOW) {
+  Serial.println("button 1 pressed");
+  if ((currentTime - lastDebounceTime1) > debounceDelay) {
+    lastDebounceTime1 = currentTime; // Update the debounce time
     
-  int buttonState = digitalRead(startButtonPin);
+    // Button 1 Action
+    if (!lapCounting1) {
+      lapCounting1 = true;
+      startTime1 = currentTime;
+      if (isFirstLap1) {
+        lapCount1 = 0; // Initialize lap count at the first press
+        isFirstLap1 = false; // No longer the first lap
+      }
+      notifyClients(); // Send the current state to the clients
+    } else {
+      updateLapInfo(1);
+    }
+  }
+}
+
+// Debounce and process Button 2 press
+if (currentButtonState2 == LOW) {
+  Serial.println("button 2 pressed");
+  if ((currentTime - lastDebounceTime2) > debounceDelay) {
+    lastDebounceTime2 = currentTime; // Update the debounce time
     
+    // Button 2 Action
+    if (!lapCounting2) {
+      lapCounting2 = true;
+      startTime2 = currentTime;
+      if (isFirstLap2) {
+        lapCount2 = 0; // Similar logic for the second lane
+        isFirstLap2 = false; // Indicating the first lap has been acknowledged
+      }
+      notifyClients(); // Notify clients with the updated state
+    } else {
+      updateLapInfo(2);
+    }
+  }
+}
+    
+  int buttonState = digitalRead(startButtonPin);    
   if (buttonState == LOW && lastButtonState == HIGH && (currentTime - lastButtonPress) > debounceDelay) {
-      lastButtonPress = currentTime; // Update the last button press time
-        
+      lastButtonPress = currentTime;        
       // Initiate the start sequence
       startSequence();
   }
@@ -257,11 +289,9 @@ case RED_LIGHTS:
     if (millis() - redLightStartTime >= 1000) {
         static int ledIndex = 0; // Variable to track the LED index
         static unsigned long previousLEDTime = 0; // Variable to track the previous LED turning on time
-
         // Calculate the time elapsed since the previous LED turning on time
         unsigned long currentTime = millis();
         unsigned long elapsedTime = currentTime - previousLEDTime;
-
         // Check if it's time to turn on the next LED
         if (elapsedTime >= 1000 && ledIndex < NUM_LEDS / 2) {
             // Play tone for the current LED
@@ -269,19 +299,15 @@ case RED_LIGHTS:
                 playTone(400, 50); // Play a short beep
                 ledTonePlayed[ledIndex] = true; // Mark the tone as played for this LED
             }
-
             // Turn on the current LED
             leds[ledIndex] = CRGB::Red;
             leds[NUM_LEDS - 1 - ledIndex] = CRGB::Red;
             FastLED.show();
-
             // Update the previous LED turning on time
             previousLEDTime = currentTime;
-
             // Move to the next LED
             ledIndex++;
         }
-
         // Check if all LEDs have been turned on
         if (ledIndex >= NUM_LEDS / 2) {
             ledIndex = 0;
@@ -327,8 +353,8 @@ case TURN_OFF_LIGHTS:
 
   if (digitalRead(resetPin) == LOW) {
     Serial.println("Restart button pressed");
-    delay(1000); // Add a small delay for debouncing
-    ESP.restart(); // Restart the ESP32
+    delay(1000);
+    ESP.restart();
   }
 
   // Update and display lap information for Lane 1
@@ -385,6 +411,7 @@ void updateLapInfo(int lane) {
     // Increment lap count
     (*lapCount)++;
     Serial.println("Lap count: " + String(*lapCount));
+    notifyClients();
   }
 }
 
