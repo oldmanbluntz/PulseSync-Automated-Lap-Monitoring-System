@@ -198,21 +198,80 @@ document.getElementById('resetButton').addEventListener('click', function() {
     });
 });
 
-// JavaScript code to periodically update lap information
-setInterval(function() {
-  fetch('/lap-info')
-    .then(response => response.json())
-    .then(data => {
-      document.getElementById('lapCount1').textContent = data.lane1.lapCount;
-      document.getElementById('currentLap1').textContent = data.lane1.currentLap;
-      document.getElementById('recentLap1').textContent = data.lane1.recentLap;
-      document.getElementById('bestLap1').textContent = data.lane1.bestLap;
-      document.getElementById('lapCount2').textContent = data.lane2.lapCount;
-      document.getElementById('currentLap2').textContent = data.lane2.currentLap;
-      document.getElementById('recentLap2').textContent = data.lane2.recentLap;
-      document.getElementById('bestLap2').textContent = data.lane2.bestLap;
-    });
-}, 25);
+var ws = new WebSocket('ws://' + location.hostname + '/ws');
+
+let lapStartTimestamp1 = null;
+let lapStartTimestamp2 = null;
+let timerStarted1 = false;
+let timerStarted2 = false;
+let lapCount1 = 0; // Track the number of laps for lane 1
+let lapCount2 = 0; // Track the number of laps for lane 2
+
+function updateCurrentLapDisplay1() {
+  if (timerStarted1) {
+    const now = Date.now();
+    const elapsed = lapStartTimestamp1 ? (now - lapStartTimestamp1) / 1000.0 : 0;
+    document.getElementById('currentLap1').textContent = elapsed.toFixed(3) + " s";
+    requestAnimationFrame(updateCurrentLapDisplay1);
+  }
+}
+
+function updateCurrentLapDisplay2() {
+  if (timerStarted2) {
+    const now = Date.now();
+    const elapsed = lapStartTimestamp2 ? (now - lapStartTimestamp2) / 1000.0 : 0;
+    document.getElementById('currentLap2').textContent = elapsed.toFixed(3) + " s";
+    requestAnimationFrame(updateCurrentLapDisplay2);
+  }
+}
+
+ws.onmessage = function(event) {
+  var data = JSON.parse(event.data);
+
+  // Check and update logic for Lane 1 (Similar logic should be mirrored for Lane 2)
+  if (data.lane1) {
+    let newLapCount1 = data.lane1.lapCount !== "--" ? parseInt(data.lane1.lapCount, 10) : null;
+    if (newLapCount1 !== null && newLapCount1 >= 0) {
+      if (!timerStarted1 || newLapCount1 !== lapCount1) {
+        lapCount1 = newLapCount1; // Update lap count
+        timerStarted1 = true;
+        lapStartTimestamp1 = Date.now(); // Reset timestamp for the new lap
+        requestAnimationFrame(updateCurrentLapDisplay1); // Ensure timer updates start or continue
+      }
+    }
+
+    document.getElementById('lapCount1').textContent = data.lane1.lapCount;
+    document.getElementById('recentLap1').textContent = data.lane1.recentLap.toFixed(3) + " s";
+    document.getElementById('bestLap1').textContent = data.lane1.bestLap.toFixed(3) + " s";
+
+    // Reset "Current Lap" timer display if it's the first lap or a new lap has started
+    if (data.lane1.lapCount === "0" || newLapCount1 > lapCount1) {
+      document.getElementById('currentLap1').textContent = "0.000 s";
+    }
+  }
+
+  // Repeat similar logic for Lane 2
+  if (data.lane2) {
+    let newLapCount2 = data.lane2.lapCount !== "--" ? parseInt(data.lane2.lapCount, 10) : null;
+    if (newLapCount2 !== null && newLapCount2 >= 0) {
+      if (!timerStarted2 || newLapCount2 !== lapCount2) {
+        lapCount2 = newLapCount2; // Update lap count
+        timerStarted2 = true;
+        lapStartTimestamp2 = Date.now(); // Reset timestamp for the new lap
+        requestAnimationFrame(updateCurrentLapDisplay2); // Ensure timer updates start or continue
+      }
+    }
+
+    document.getElementById('lapCount2').textContent = data.lane2.lapCount;
+    document.getElementById('recentLap2').textContent = data.lane2.recentLap.toFixed(3) + " s";
+    document.getElementById('bestLap2').textContent = data.lane2.bestLap.toFixed(3) + " s";
+
+    // Reset "Current Lap" timer display if it's the first lap or a new lap has started
+    if (data.lane2.lapCount === "0" || newLapCount2 > lapCount2) {
+      document.getElementById('currentLap2').textContent = "0.000 s";
+    }
+  }
+};
 
 // JavaScript code to control the start lights
 function updateStartLights(ledStatus) {
