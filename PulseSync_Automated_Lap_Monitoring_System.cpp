@@ -1,4 +1,3 @@
-
 // Include necessary libraries
 #include <Wire.h>
 #include <Adafruit_SSD1306.h>
@@ -12,17 +11,14 @@
 #include <AsyncTCP.h>
 #include <ElegantOTA.h>
 
-
 // Define Wi-Fi credentials
-const char* ssid = "SSID";
-const char* password = "PASSWORD";
+const char* ssid = "The Promised LAN";
+const char* password = "goldenbitch";
 
 // Create instances of SSD1306 displays and AsyncWebServer
 Adafruit_SSD1306 display1(128, 64, &Wire, -1);
 Adafruit_SSD1306 display2(128, 64, &Wire, -1);
 AsyncWebServer server(80);
-AsyncWebSocket ws("/ws");
-
 
 // Variables for lap timing and counting
 unsigned long startTime1, startTime2;
@@ -39,7 +35,6 @@ const int buttonPin2 = 27;
 const int resetPin = 26;
 const int startButtonPin = 25;
 const int buzzerPin = 16;
-static int ledIndex = 0; // Variable to track the LED index
 
 // Pins for start lights
 #define LED_PIN     13  // Pin connected to the LED strip
@@ -136,50 +131,6 @@ void startSequence() {
     redLightStartTime = millis();
 }
 
-void notifyClients() {
-    JsonDocument doc;
-    doc["lane1"]["lapCount"] = lapCount1;
-    doc["lane1"]["recentLap"] = recentLap1 / 1000.0;
-    doc["lane1"]["bestLap"] = bestLap1 / 1000.0;
-    doc["lane1"]["currentLap"] = lapCounting1 ? (millis() - startTime1) / 1000.0 : 0.0;
-    doc["lane2"]["lapCount"] = lapCount2;
-    doc["lane2"]["recentLap"] = recentLap2 / 1000.0;
-    doc["lane2"]["bestLap"] = bestLap2 / 1000.0;
-    doc["lane2"]["currentLap"] = lapCounting2 ? (millis() - startTime2) / 1000.0 : 0.0;
-    doc["ledIndex"] = ledIndex;
-
-    String json;
-    serializeJson(doc, json);
-    ws.textAll(json);
-}
-
-void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type,
-               void *arg, uint8_t *data, size_t len) {
-    if (type == WS_EVT_CONNECT) {
-        Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
-    } else if (type == WS_EVT_DISCONNECT) {
-        Serial.printf("WebSocket client #%u disconnected\n", client->id());
-    } else if (type == WS_EVT_DATA) {
-        // Create a temporary buffer for the data
-        char temp[len + 1];
-        memcpy(temp, data, len);
-        temp[len] = '\0';
-        
-        // Parse JSON object from data
-        JsonDocument doc;
-        deserializeJson(doc, temp);
-        String action = doc["action"];
-        
-        if (action == "start") {
-            Serial.println("Start sequence initiated");
-            startSequence();
-        } else if (action == "reset") {
-            Serial.println("Reset action triggered");
-            ESP.restart();
-        }
-    }
-}
-
 // Setup function
 void setup() {
   Serial.begin(115200);
@@ -232,7 +183,8 @@ if(!SPIFFS.begin(true)){
     Serial.println("An error occurred while mounting SPIFFS");
     return;
   }
-   server.on("/lap-info", HTTP_GET, [](AsyncWebServerRequest *request){
+   // Set up the web server route and response
+  server.on("/lap-info", HTTP_GET, [](AsyncWebServerRequest *request){
     JsonDocument doc;
     doc["lane1"]["lapCount"] = lapCount1;
     doc["lane1"]["recentLap"] = recentLap1 / 1000.0;
@@ -242,22 +194,29 @@ if(!SPIFFS.begin(true)){
     doc["lane2"]["recentLap"] = recentLap2 / 1000.0;
     doc["lane2"]["bestLap"] = bestLap2 / 1000.0;
     doc["lane2"]["currentLap"] = lapCounting2 ? (millis() - startTime2) / 1000.0 : static_cast<double>(0);
-
-    // Add the LED index to the JSON response
-    doc["ledIndex"] = ledIndex;
-
     String json;
     serializeJson(doc, json);
     request->send(200, "application/json", json);
-});
+  });
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(SPIFFS, "/index.html", "text/html");
   });
   ElegantOTA.begin(&server);    // Start ElegantOTA
-    // Add more routes as needed for other files
-
-  ws.onEvent(onWsEvent);
-    server.addHandler(&ws);
+  server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request){
+    Serial.println("Reset action triggered");
+    delay(1000); // Add a delay for stability (optional)
+    ESP.restart(); // Restart the ESP32
+    request->send(200, "text/plain", "Reset action triggered successfully");
+  });
+  server.on("/start", HTTP_GET, [](AsyncWebServerRequest *request){
+    Serial.println("Received /start web request");
+    // Ensure this request initiates the sequence properly.
+    // Assuming `startSequence()` is a new function you will create that
+    // encapsulates the necessary steps to start the sequence.
+    startSequence();
+    request->send(200, "text/plain", "Start sequence initiated");
+});
+  // Add more routes as needed for other files  
 
   // Start the web server
   server.begin();
@@ -280,7 +239,7 @@ void loop() {
         startSequence();
         
         // Debounce delay to avoid bouncing issues - might be optional here depending on your setup
-        delay(debounceDelay);
+        // delay(debounceDelay);
     }
   switch (lightState) {
   case IDLE:
@@ -288,6 +247,7 @@ void loop() {
 case RED_LIGHTS:
     // Turn on outer LEDs one by one with a tone
     if (millis() - redLightStartTime >= 1000) {
+        static int ledIndex = 0; // Variable to track the LED index
         static unsigned long previousLEDTime = 0; // Variable to track the previous LED turning on time
 
         // Calculate the time elapsed since the previous LED turning on time
