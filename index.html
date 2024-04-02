@@ -168,36 +168,75 @@ body {
 </div>
 
 <script>
-const ws = new WebSocket('ws://' + window.location.hostname + '/ws');
-
-ws.onopen = function() {
-    console.log('WebSocket connection established');
-};
-
-ws.onerror = function(error) {
-    console.log('WebSocket Error: ' + error);
-};
-
-ws.onmessage = function(event) {
-    const data = JSON.parse(event.data);
-    document.getElementById('lapCount1').textContent = data.lane1.lapCount;
-    document.getElementById('currentLap1').textContent = data.lane1.currentLap;
-    document.getElementById('recentLap1').textContent = data.lane1.recentLap;
-    document.getElementById('bestLap1').textContent = data.lane1.bestLap;
-    document.getElementById('lapCount2').textContent = data.lane2.lapCount;
-    document.getElementById('currentLap2').textContent = data.lane2.currentLap;
-    document.getElementById('recentLap2').textContent = data.lane2.recentLap;
-    document.getElementById('bestLap2').textContent = data.lane2.bestLap;
-};
-
+// JavaScript code to handle button actions
 document.getElementById('startButton').addEventListener('click', function() {
-    ws.send(JSON.stringify({action: 'start'}));
+  // Send an HTTP GET request to trigger the start action on the ESP32
+  console.log('Sending start action request...');
+  fetch('/start')
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      console.log('Start action triggered successfully');
+    })
+    .catch(error => {
+      console.error('Error triggering start action:', error);
+    });
 });
 
 document.getElementById('resetButton').addEventListener('click', function() {
-    ws.send(JSON.stringify({action: 'reset'}));
+  // Send an HTTP GET request to trigger the reset action on the ESP32
+  fetch('/reset')
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      console.log('Reset action triggered successfully');
+    })
+    .catch(error => {
+      console.error('Error triggering reset action:', error);
+    });
 });
+
+// JavaScript code to periodically update lap information
+setInterval(function() {
+  fetch('/lap-info')
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById('lapCount1').textContent = data.lane1.lapCount;
+      document.getElementById('currentLap1').textContent = data.lane1.currentLap;
+      document.getElementById('recentLap1').textContent = data.lane1.recentLap;
+      document.getElementById('bestLap1').textContent = data.lane1.bestLap;
+      document.getElementById('lapCount2').textContent = data.lane2.lapCount;
+      document.getElementById('currentLap2').textContent = data.lane2.currentLap;
+      document.getElementById('recentLap2').textContent = data.lane2.recentLap;
+      document.getElementById('bestLap2').textContent = data.lane2.bestLap;
+    });
+}, 25);
+
+// JavaScript code to control the start lights
+function updateStartLights(ledStatus) {
+  // Reset all lights to black
+  document.querySelectorAll('.light').forEach(light => {
+    light.classList.remove('red', 'green');
+  });
+
+  // Set the color of each light based on the LED status
+  for (let i = 0; i < 8; i++) {
+    if (ledStatus[i] === 'R') {
+      document.getElementById('light' + (i + 1)).classList.add('red');
+    } else if (ledStatus[i] === 'G') {
+      document.getElementById('light' + (i + 1)).classList.add('green');
+    }
+  }
+}
+
+// Example usage:
+// updateStartLights(['R', 'R', 'R', 'G', 'G', 'G', 'G', 'G']); // Change the LED status as needed
 </script>
+
+</body>
+</html>
 
 </body>
 </html>
