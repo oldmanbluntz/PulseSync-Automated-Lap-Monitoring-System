@@ -4,7 +4,7 @@ PulseSync Automated Lap Monitoring System
 
 Just another lap timer system for slot car tracks. Based around the ESP32, has a web portal that displays the data, as well as on screens on the track.
 
-The Web Portal is a work in progress. It works presently, but will change.
+The Web Portal is a work in progress. It works presently, but will change. Now with WebSockets.
 
 I have other plans to add to this. MicroSD card support to save track and driver data, choices for multiple types of LCD or OLED screen for the physical track,
 choices to choose how many lanes, and a few other options.
