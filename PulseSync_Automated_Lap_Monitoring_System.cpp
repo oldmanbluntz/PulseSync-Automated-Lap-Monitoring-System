@@ -50,7 +50,13 @@ CRGB leds[NUM_LEDS];
 unsigned long lastButtonPress = 0;
 unsigned long lastDebounceTime1 = 0;
 unsigned long lastDebounceTime2 = 0;
+unsigned long lastDebounceTimeReset = 0;
 unsigned long debounceDelay = 100;
+volatile bool lapFlag1 = false;
+volatile bool lapFlag2 = false;
+volatile unsigned long lastInterruptTime1 = 0;
+volatile unsigned long lastInterruptTime2 = 0;
+const unsigned long debounceTime = 50; // Adjust based on your requirements
 
 // Lap counting and initialization flags
 bool lapCounting1 = false;
@@ -61,12 +67,15 @@ bool ledTonePlayed[NUM_LEDS] = {false};
 bool isFirstLap1 = true;
 bool isFirstLap2 = true;
 
+bool forceRefresh = false; // Global variable to control page refresh
+
 // Lap press counters
 int lapPressCount1 = 0;
 int lapPressCount2 = 0;
 
 // Define the delay duration
 const unsigned long lapCountDelay = 250;
+const unsigned long debounceDelayReset = 50;
 const unsigned long minDelayBeforeGreen = 1000;
 const unsigned long maxDelayBeforeGreen = 2000;
 
@@ -122,6 +131,12 @@ void startSequence() {
 }
 
 void notifyClients() {
+  if (forceRefresh) {
+        // Send a message to force the client to refresh the page
+        ws.textAll("{\"refresh\": true}");
+        forceRefresh = false; // Reset after sending
+        return;
+    }
   JsonDocument doc;
   // Prepare comprehensive lap information for each lane
   // Here, we directly use lapCount1 and lapCount2 as they are initialized to 0 on the first press and incremented thereafter.
@@ -140,6 +155,23 @@ void notifyClients() {
   ws.textAll(message);
 }
 
+void resetLapTimes() {
+    // Reset all lap timing and counting variables
+    startTime1 = startTime2 = 0;
+    lapTime1 = lapTime2 = 0;
+    bestLap1 = bestLap2 = 0;
+    recentLap1 = recentLap2 = 0;
+    lapCount1 = lapCount2 = 0;
+    lapCounting1 = lapCounting2 = false;
+    isFirstLap1 = isFirstLap2 = true; // If you're using isFirstLap flags
+
+    // Optionally, reset display or additional state variables here
+    displayLapInfo(1, -1, 0, "--", "--");
+    displayLapInfo(2, -1, 0, "--", "--");
+    // Notify all connected clients about the reset state
+    notifyClients();
+}
+
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                AwsEventType type, void *arg, uint8_t *data, size_t len) {
   if (type == WS_EVT_CONNECT) {
@@ -147,6 +179,22 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     notifyClients(); // Optionally send current state upon new connection
   } else if (type == WS_EVT_DISCONNECT) {
     Serial.println("Client disconnected");
+  }
+}
+
+void IRAM_ATTR handleInterruptLane1() {
+  unsigned long currentTime = millis();
+  if (currentTime - lastInterruptTime1 > debounceTime) {
+    lapFlag1 = true;
+    lastInterruptTime1 = currentTime;
+  }
+}
+
+void IRAM_ATTR handleInterruptLane2() {
+  unsigned long currentTime = millis();
+  if (currentTime - lastInterruptTime2 > debounceTime) {
+    lapFlag2 = true;
+    lastInterruptTime2 = currentTime;
   }
 }
 
@@ -177,6 +225,9 @@ void setup() {
   pinMode(startButtonPin, INPUT_PULLUP);
   pinMode(buzzerPin, OUTPUT);
 
+  attachInterrupt(digitalPinToInterrupt(buttonPin1), handleInterruptLane1, FALLING);
+  attachInterrupt(digitalPinToInterrupt(buttonPin2), handleInterruptLane2, FALLING);
+
   // Initialize LED strip
   FastLED.addLeds<LED_TYPE, LED_PIN, COLOR_ORDER>(leds, NUM_LEDS).setCorrection(TypicalLEDStrip);
 
@@ -205,11 +256,12 @@ if(!SPIFFS.begin(true)){
   ElegantOTA.begin(&server);    // Start ElegantOTA
 
   server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request){
-    Serial.println("Reset action triggered");
-    delay(1000); // Add a delay for stability (optional)
-    ESP.restart(); // Restart the ESP32
-    request->send(200, "text/plain", "Reset action triggered successfully");
-  });
+    Serial.println("Web reset action triggered");
+    resetLapTimes(); // Resets the lap-related variables
+    forceRefresh = true; // Set the flag to true to signal a page refresh
+    notifyClients(); // Sends out the update, including the refresh command
+    request->send(200, "text/plain", "Lap times reset successfully");
+});
 
   server.on("/start", HTTP_GET, [](AsyncWebServerRequest *request){
     Serial.println("Received /start web request");
@@ -227,50 +279,50 @@ void loop() {
   static int lastButtonState = HIGH;
   static unsigned long lastButtonPress = 0; 
   bool currentButtonState1 = digitalRead(buttonPin1);
-bool currentButtonState2 = digitalRead(buttonPin2);
-unsigned long currentTime = millis();
+  bool currentButtonState2 = digitalRead(buttonPin2);
+  bool currentResetButtonState = digitalRead(resetPin);
+  unsigned long currentTime = millis();
 
-// Debounce and process Button 1 press
-if (currentButtonState1 == LOW) {
-  Serial.println("button 1 pressed");
-  if ((currentTime - lastDebounceTime1) > debounceDelay) {
-    lastDebounceTime1 = currentTime; // Update the debounce time
-    
-    // Button 1 Action
+if (currentResetButtonState == LOW && (currentTime - lastButtonPress) > debounceDelay) {
+    Serial.println("Reset button pressed");
+    lastButtonPress = currentTime;
+    resetLapTimes(); // Assume this resets all lap counters and timers
+  }
+
+  // Handle lap completion flags set by ISRs
+  if (lapFlag1) {
+    lapFlag1 = false; // Clear the flag
+    Serial.println("Lane 1 lap completed");
+    // Handle lap completion logic for lane 1
     if (!lapCounting1) {
       lapCounting1 = true;
-      startTime1 = currentTime;
+      startTime1 = millis();
       if (isFirstLap1) {
         lapCount1 = 0; // Initialize lap count at the first press
-        isFirstLap1 = false; // No longer the first lap
+        isFirstLap1 = false;
       }
-      notifyClients(); // Send the current state to the clients
     } else {
-      updateLapInfo(1);
+      updateLapInfo(1); // Update lap info for lane 1
     }
+    notifyClients(); // Notify clients of the change
   }
-}
 
-// Debounce and process Button 2 press
-if (currentButtonState2 == LOW) {
-  Serial.println("button 2 pressed");
-  if ((currentTime - lastDebounceTime2) > debounceDelay) {
-    lastDebounceTime2 = currentTime; // Update the debounce time
-    
-    // Button 2 Action
+  if (lapFlag2) {
+    lapFlag2 = false; // Clear the flag
+    Serial.println("Lane 2 lap completed");
+    // Handle lap completion logic for lane 2
     if (!lapCounting2) {
       lapCounting2 = true;
-      startTime2 = currentTime;
+      startTime2 = millis();
       if (isFirstLap2) {
-        lapCount2 = 0; // Similar logic for the second lane
-        isFirstLap2 = false; // Indicating the first lap has been acknowledged
+        lapCount2 = 0; // Similar initialization for lane 2
+        isFirstLap2 = false;
       }
-      notifyClients(); // Notify clients with the updated state
     } else {
-      updateLapInfo(2);
+      updateLapInfo(2); // Update lap info for lane 2
     }
+    notifyClients(); // Notify clients of the change
   }
-}
     
   int buttonState = digitalRead(startButtonPin);    
   if (buttonState == LOW && lastButtonState == HIGH && (currentTime - lastButtonPress) > debounceDelay) {
@@ -336,7 +388,7 @@ case GREEN_LIGHTS:
   if (millis() - redLightStartTime >= 5000) {
     fill_solid(leds, NUM_LEDS, CRGB::Green);
     FastLED.show();
-    playTone(1000, 250); // Play a short beep
+    playTone(1000, 500); // Play a short beep
     greenLightStartTime = millis();
     lightState = TURN_OFF_LIGHTS;
   }
@@ -352,11 +404,19 @@ case TURN_OFF_LIGHTS:
 }
 
   if (digitalRead(resetPin) == LOW) {
-    Serial.println("Restart button pressed");
-    delay(1000);
-    ESP.restart();
-  }
+        // Check if the current press is at least debounceDelayReset milliseconds after the last valid press
+        if ((currentTime - lastDebounceTimeReset) > debounceDelayReset) {
+            Serial.println("Reset button pressed with debounce");
+            
+            // Here, handle the reset logic
+            resetLapTimes(); // This function resets all your lap-related variables
+            forceRefresh = true; // Signal to notifyClients to send refresh command
+            
+            notifyClients(); // Notify all clients, now includes a refresh command
 
+            lastDebounceTimeReset = currentTime; // Update the last debounce time
+        }
+    }
   // Update and display lap information for Lane 1
   if (lapCounting1) {
     displayLapInfo(1, lapCount1, millis() - startTime1, bestLap1 == 0 ? "--" : String(bestLap1 / 1000.0, 3), recentLap1 == 0 ? "--" : String(recentLap1 / 1000.0, 3));
@@ -414,7 +474,6 @@ void updateLapInfo(int lane) {
     notifyClients();
   }
 }
-
 // Function to display lap information on the OLED display
 void displayLapInfo(int lane, int lapCount, unsigned long currentLap, String bestLap, String recentLap) {
   Adafruit_SSD1306 *display;
@@ -433,55 +492,43 @@ void displayLapInfo(int lane, int lapCount, unsigned long currentLap, String bes
   // Calculate the center position for Lane and Laps
   int displayWidth = display->width();
   String laneText = "Lane: " + String(lane);
-  String lapsText = "Laps: " + String(lapCount);
+  String lapsText = lapCount >= 0 ? "Laps: " + String(lapCount) : "Laps: --";
 
   // Convert Strings to char arrays
   char laneCharArray[laneText.length() + 1];
-  laneText.toCharArray(laneCharArray, laneText.length() + 1);
+  laneText.toCharArray(laneCharArray, sizeof(laneCharArray));
 
   char lapsCharArray[lapsText.length() + 1];
-  lapsText.toCharArray(lapsCharArray, lapsText.length() + 1);
+  lapsText.toCharArray(lapsCharArray, sizeof(lapsCharArray));
 
-  int textWidthLane = 0;
-  int textWidthLaps = 0;
+  display->setTextSize(2); // Larger text for "Lane" and "Laps"
 
-  // Set the larger text size for Lane and Laps
-  display->setTextSize(2);
-
-  // Get text bounds for Lane
+  // Center and print "Lane"
   int16_t x1, y1;
   uint16_t w, h;
   display->getTextBounds(laneCharArray, 0, 0, &x1, &y1, &w, &h);
-  textWidthLane = w;
-
-  // Get text bounds for Laps
-  display->getTextBounds(lapsCharArray, 0, 0, &x1, &y1, &w, &h);
-  textWidthLaps = w;
-
-  // Set the cursor position for Lane
-  int xPosLane = (displayWidth - textWidthLane) / 2;
-  display->setCursor(xPosLane, 0);
+  display->setCursor((displayWidth - w) / 2, 0);
   display->println(laneText);
 
-  // Add a bit of vertical spacing
-  display->setCursor(0, display->getCursorY() + 2);
-
-  // Set the cursor position for Laps
-  int xPosLaps = (displayWidth - textWidthLaps) / 2;
-  display->setCursor(xPosLaps, display->getCursorY());
+  // Center and print "Laps"
+  display->getTextBounds(lapsCharArray, 0, 0, &x1, &y1, &w, &h);
+  display->setCursor((displayWidth - w) / 2, 16); // Adjust y position based on your layout
   display->println(lapsText);
 
-  // Reset text size for the remaining information
-  display->setTextSize(1);
+  display->setTextSize(1); // Smaller text for detailed info
 
-  // Add 1-pixel vertical spacing between Laps and timers
-  display->setCursor(0, display->getCursorY() + 1);
-
-  // Continue with the original layout for the time-related information
+  // Print "Current Lap"
+  display->setCursor(0, 34); // Adjust y position based on your layout
   display->print("Current Lap: ");
-  display->println(String(currentLap / 1000.0, 3));
-  display->println("Recent Lap: " + recentLap);
-  display->println("Best Lap: " + bestLap);
+  display->println(currentLap > 0 ? String(currentLap / 1000.0, 3) + " s" : "--");
+
+  // Print "Recent Lap"
+  display->print("Recent Lap: ");
+  display->println(recentLap != "0" && recentLap != "--" ? recentLap + " s" : "--");
+
+  // Print "Best Lap"
+  display->print("Best Lap: ");
+  display->println(bestLap != "0" && bestLap != "--" ? bestLap + " s" : "--");
 
   // Update the OLED display
   display->display();
