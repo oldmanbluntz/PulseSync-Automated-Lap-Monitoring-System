@@ -227,6 +227,10 @@ function updateCurrentLapDisplay2() {
 
 ws.onmessage = function(event) {
   var data = JSON.parse(event.data);
+  if (data.refresh) {
+        window.location.reload(); // Refresh the page
+        return;
+    }
 
   // Check and update logic for Lane 1 (Similar logic should be mirrored for Lane 2)
   if (data.lane1) {
