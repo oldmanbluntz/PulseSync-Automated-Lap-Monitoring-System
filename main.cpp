@@ -12,8 +12,8 @@
 #include <ElegantOTA.h>
 
 // Define Wi-Fi credentials
-const char* ssid = "SSID";
-const char* password = "PASSWORD";
+const char* ssid = "The Promised LAN";
+const char* password = "goldenbitch";
 
 // Create instances of SSD1306 displays and AsyncWebServer
 Adafruit_SSD1306 display1(128, 64, &Wire, -1);
@@ -272,6 +272,17 @@ if(!SPIFFS.begin(true)){
     Serial.println("Received /start web request");
     startSequence();
     request->send(200, "text/plain", "Start sequence initiated");
+});
+
+server.on("/api/updateStartSequence", HTTP_POST, [](AsyncWebServerRequest *request){
+  // Simply update the startSequence flag here
+  startTimestamp = 0; // Assuming 'startSequence' is the flag controlling the sequence start
+  
+  // Respond to the client to confirm the action
+  request->send(200, "application/json", "{\"success\":true, \"message\":\"Start sequence flag updated.\"}");
+  
+  // You might want to notify all connected clients about this update
+  notifyClients();
 });
   // Add more routes as needed for other files  
 
