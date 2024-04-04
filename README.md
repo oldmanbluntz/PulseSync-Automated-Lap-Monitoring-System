@@ -1,3 +1,5 @@
+![pulsesync logo fixed](https://github.com/oldmanbluntz/PulseSync-Automated-Lap-Monitoring-System/assets/2407099/e47ef713-a054-4205-9c4c-53b520d475b9)
+
 # P.S.A.L.M.S.
 
 PulseSync Automated Lap Monitoring System
