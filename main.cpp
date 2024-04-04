@@ -78,6 +78,8 @@ const unsigned long lapCountDelay = 250;
 const unsigned long debounceDelayReset = 50;
 const unsigned long minDelayBeforeGreen = 1000;
 const unsigned long maxDelayBeforeGreen = 2000;
+unsigned long startTimestamp = 0;
+unsigned long randomDelay = 0;
 
 // Function to play tone
 void playTone(int frequency, int duration) {
@@ -90,10 +92,7 @@ void updateLapInfo(int lane);
 void displayLapInfo(int lane, int lapCount, unsigned long currentLap, String bestLap, String recentLap);
 
 void calculateAndSetDelayBeforeGreen() {
-    delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);
-    Serial.println("Before random delay generation:");
-    Serial.print("Calculated delayBeforeGreen: ");
-    Serial.println(delayBeforeGreen);
+    delayBeforeGreen = random(minDelayBeforeGreen, maxDelayBeforeGreen + 1);    
 }
 
 // Define the enum for light sequence state
@@ -118,18 +117,6 @@ void resetStartSequence() {
     FastLED.show(); // Update the LED strip to apply the off state
 }
 
-void startSequence() {
-  randomSeed(esp_random());
-  unsigned long seed = esp_random();
-  randomSeed(seed);
-  Serial.print("Random seed: ");
-  Serial.println(seed); // Print the random seed to the serial monitor
-    resetStartSequence();
-    calculateAndSetDelayBeforeGreen();    
-    lightState = RED_LIGHTS;
-    redLightStartTime = millis();
-}
-
 void notifyClients() {
   if (forceRefresh) {
         // Send a message to force the client to refresh the page
@@ -149,10 +136,28 @@ void notifyClients() {
   doc["lane2"]["recentLap"] = recentLap2 / 1000.0;
   doc["lane2"]["bestLap"] = bestLap2 / 1000.0;
   doc["lane2"]["currentLap"] = lapCounting2 ? (millis() - startTime2) / 1000.0 : static_cast<double>(-1);
+   if (startTimestamp > 0 && randomDelay > 0) {
+    doc["startSequence"] = true;
+    doc["startTimestamp"] = startTimestamp;
+    doc["randomDelay"] = randomDelay;
+   }
 
   String message;
   serializeJson(doc, message);
   ws.textAll(message);
+}
+
+void startSequence() {
+  randomSeed(esp_random());
+  unsigned long seed = esp_random();
+  randomSeed(seed);
+    resetStartSequence();
+    calculateAndSetDelayBeforeGreen(); 
+    startTimestamp = millis();  // Set the global startTimestamp variable
+    randomDelay = delayBeforeGreen;  // Set the global randomDelay variable
+    lightState = RED_LIGHTS;
+    redLightStartTime = millis();
+    notifyClients();
 }
 
 void resetLapTimes() {
@@ -291,8 +296,7 @@ if (currentResetButtonState == LOW && (currentTime - lastButtonPress) > debounce
 
   // Handle lap completion flags set by ISRs
   if (lapFlag1) {
-    lapFlag1 = false; // Clear the flag
-    Serial.println("Lane 1 lap completed");
+    lapFlag1 = false; // Clear the flag    
     // Handle lap completion logic for lane 1
     if (!lapCounting1) {
       lapCounting1 = true;
@@ -309,7 +313,6 @@ if (currentResetButtonState == LOW && (currentTime - lastButtonPress) > debounce
 
   if (lapFlag2) {
     lapFlag2 = false; // Clear the flag
-    Serial.println("Lane 2 lap completed");
     // Handle lap completion logic for lane 2
     if (!lapCounting2) {
       lapCounting2 = true;
@@ -406,8 +409,6 @@ case TURN_OFF_LIGHTS:
   if (digitalRead(resetPin) == LOW) {
         // Check if the current press is at least debounceDelayReset milliseconds after the last valid press
         if ((currentTime - lastDebounceTimeReset) > debounceDelayReset) {
-            Serial.println("Reset button pressed with debounce");
-            
             // Here, handle the reset logic
             resetLapTimes(); // This function resets all your lap-related variables
             forceRefresh = true; // Signal to notifyClients to send refresh command
@@ -430,7 +431,6 @@ case TURN_OFF_LIGHTS:
 
 // Function to update lap information
 void updateLapInfo(int lane) {
-  Serial.println("Updating lap info for lane " + String(lane));
   unsigned long currentTime = millis();
   unsigned long *startTime, *lapTime, *bestLap, *recentLap;
   int *lapCount;
@@ -456,12 +456,10 @@ void updateLapInfo(int lane) {
   // Check if lap counting is active
   if (*lapCounting) {
     *lapTime = currentTime - *startTime;
-    Serial.println("Lap time: " + String(*lapTime / 1000.0, 3));
 
     // Update best lap if the current lap is faster
     if (*lapTime < *bestLap || *bestLap == 0) {
       *bestLap = *lapTime;
-      Serial.println("Best lap: " + String(*bestLap / 1000.0, 3));
     }
 
     // Update recent lap and reset the lap timer
@@ -470,7 +468,6 @@ void updateLapInfo(int lane) {
 
     // Increment lap count
     (*lapCount)++;
-    Serial.println("Lap count: " + String(*lapCount));
     notifyClients();
   }
 }
