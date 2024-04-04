@@ -225,12 +225,56 @@ function updateCurrentLapDisplay2() {
   }
 }
 
+function updateStartLights(lightPattern) {
+    document.querySelectorAll('.light').forEach((light, index) => {
+        light.className = 'light'; // Reset class to just 'light' to clear previous colors
+        if (lightPattern[index] === 'R') {
+            light.classList.add('red');
+        } else if (lightPattern[index] === 'G') {
+            light.classList.add('green');
+        }
+        // If '-', no class is added, keeping the light off/black
+    });
+}
+
+function playTone(frequency, duration) {
+    let audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    let oscillator = audioContext.createOscillator();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime); // Set frequency
+    oscillator.connect(audioContext.destination); // Connect oscillator to destination
+    oscillator.start(); // Start the oscillator
+    setTimeout(() => { oscillator.stop(); }, duration); // Stop the oscillator after the duration
+}
+
+function startLightAndSoundSequence(randomDelay) {
+    // Start with the red light sequence
+    setTimeout(() => { updateStartLights(['R', '-', '-', '-', '-', '-', '-', 'R']); playTone(400, 50); }, 1000); // Phase 1
+    setTimeout(() => { updateStartLights(['R', 'R', '-', '-', '-', '-', 'R', 'R']); playTone(400, 50); }, 2000); // Phase 2
+    setTimeout(() => { updateStartLights(['R', 'R', 'R', '-', '-', 'R', 'R', 'R']); playTone(400, 50); }, 3000); // Phase 3
+    setTimeout(() => { updateStartLights(['R', 'R', 'R', 'R', 'R', 'R', 'R', 'R']); playTone(400, 50); }, 4000); // Phase 4
+
+    const delayBeforeGreen = 4000 + randomDelay; // Total delay before green includes all preceding phases + randomDelay
+
+    // Green light sequence starts after the cumulative delay (including randomDelay)
+    setTimeout(() => { updateStartLights(['G', 'G', 'G', 'G', 'G', 'G', 'G', 'G']); playTone(1000, 500); }, delayBeforeGreen);
+
+    // Finally, turn off the lights after the green phase duration
+    setTimeout(() => { updateStartLights(['-', '-', '-', '-', '-', '-', '-', '-']); }, delayBeforeGreen + 3000);
+}
+
 ws.onmessage = function(event) {
   var data = JSON.parse(event.data);
+
+  // Check for page refresh command
   if (data.refresh) {
-        window.location.reload(); // Refresh the page
-        return;
-    }
+    window.location.reload(); // Refresh the page if indicated by the server
+  } 
+  // Check if startSequence is true in the received message
+  else if (data.startSequence === true) {
+    const randomDelay = data.randomDelay; // Extract the randomDelay value
+    startLightAndSoundSequence(randomDelay); // Trigger the sequence with the provided delay
+  }
 
   // Check and update logic for Lane 1 (Similar logic should be mirrored for Lane 2)
   if (data.lane1) {
@@ -276,26 +320,6 @@ ws.onmessage = function(event) {
     }
   }
 };
-
-// JavaScript code to control the start lights
-function updateStartLights(ledStatus) {
-  // Reset all lights to black
-  document.querySelectorAll('.light').forEach(light => {
-    light.classList.remove('red', 'green');
-  });
-
-  // Set the color of each light based on the LED status
-  for (let i = 0; i < 8; i++) {
-    if (ledStatus[i] === 'R') {
-      document.getElementById('light' + (i + 1)).classList.add('red');
-    } else if (ledStatus[i] === 'G') {
-      document.getElementById('light' + (i + 1)).classList.add('green');
-    }
-  }
-}
-
-// Example usage:
-// updateStartLights(['R', 'R', 'R', 'G', 'G', 'G', 'G', 'G']); // Change the LED status as needed
 </script>
 
 </body>
